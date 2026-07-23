@@ -6,45 +6,48 @@
 <title>SLS WIFI</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
-body{background:#1a1033;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:15px}
-.card{background:#3b2a7a;width:100%;max-width:360px;border-radius:24px;padding:20px;text-align:center;color:white}
-.top{font-size:11px;letter-spacing:2px;opacity:0.7;margin-bottom:5px}
-.card h1{font-size:28px;font-weight:900;margin-bottom:2px}
-.card .sub{font-size:10px;letter-spacing:2px;opacity:0.6;margin-bottom:20px}
-.btn-plano{background:white;color:#000;border:2px solid #FFD600;padding:14px;border-radius:14px;width:100%;font-weight:900;font-size:14px;margin-bottom:10px;cursor:pointer}
-.btn-plano.selecionado{background:#FFD600}
-.btn-gerar{display:none;background:#00ff88;color:#000;padding:14px;border-radius:14px;width:100%;font-weight:900;border:none;margin-top:10px;cursor:pointer}
-.btn-gerar.mostrar{display:block}
-.pix-box{background:white;border-radius:16px;padding:15px;margin:15px 0}
-#qrcodeImg{width:220px;height:220px;margin:0 auto;display:block}
-#pixCopiaECola{word-break:break-all;background:#f0f0f0;color:#222;padding:10px;border-radius:8px;margin-top:10px;font-size:10px;text-align:left}
-.btn-copiar{background:#FFD600;color:#000;border:none;padding:14px;border-radius:12px;width:100%;font-weight:900;font-size:15px;cursor:pointer;margin:10px 0}
-.btn-copiar.copiado{background:#00c851;color:white}
-.btn-pago{background:#4ade80;color:#000;border:none;padding:14px;border-radius:20px;width:100%;font-weight:900;font-size:14px;cursor:pointer;margin-top:10px}
-.piscando{font-size:13px;font-weight:700;margin:10px 0;color:#000}
-.link-voucher{color:#b8a7e8;font-size:12px;margin:10px 0;display:block;text-decoration:underline}
+body{background:#2b1654;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:15px}
+.card{background:#3d2a7d;width:100%;max-width:340px;border-radius:22px;padding:18px;text-align:center;color:white}
+.topo{font-size:11px;letter-spacing:1.5px;opacity:.8}
+.topo h1{font-size:26px;font-weight:900;margin:2px 0}
+.topo p{font-size:11px;opacity:.7;margin-bottom:14px}
+.btn-plano{background:white;color:#000;border:2px solid transparent;padding:13px;border-radius:14px;width:100%;font-weight:900;font-size:13px;margin-bottom:9px;cursor:pointer}
+.btn-plano.selecionado{border-color:#FFD600;background:#fff8d1}
+#btnGerar{display:none;background:#00ff88;color:#000;padding:14px;border-radius:14px;width:100%;font-weight:900;border:none;margin-top:8px;cursor:pointer}
+#btnGerar.mostrar{display:block}
+#pixArea{display:none}
+.btn-gerado{background:#FFD600;color:#000;border:none;padding:12px;border-radius:12px;width:100%;font-weight:900;font-size:13px;margin-bottom:12px}
+.pix-box{background:white;border-radius:16px;padding:12px}
+#qrcodeImg{width:210px;height:210px;margin:0 auto;display:block;background:white}
+#pixCopiaECola{word-break:break-all;background:#f2f2f2;color:#222;padding:9px;border-radius:8px;margin-top:10px;font-size:9px;text-align:left;line-height:1.3;border:1px dashed #999}
+.btn-copia{background:#FFD600;color:#000;border:none;padding:8px 20px;border-radius:20px;font-weight:900;font-size:12px;cursor:pointer;margin-top:10px}
+.btn-copia.copiado{background:#00c851;color:white}
+.piscando{color:#333;font-size:12px;font-weight:700;margin-top:10px}
+.link-voucher{color:#b9a6f0;font-size:11px;margin:12px 0;display:block;text-decoration:underline}
+.btn-pago{background:#4ade80;color:#000;border:none;padding:13px;border-radius:20px;width:100%;font-weight:900;font-size:13px;cursor:pointer;margin-top:8px}
+.mac{font-size:9px;opacity:.5;margin-top:10px}
 </style>
 </head>
 <body>
 <div class="card">
-<div class="top">INTERNET RAPIDA AQUI</div>
+<div class="topo">CONECTE - SE AQUI!!!<h1>SLS WIFI 🚀</h1><p>INTERNET RAPIDA AQUI</p></div>
 <div id="planosArea">
 <button class="btn-plano" onclick="selecionar(2,this)">1 HORA R$ 2,00</button>
 <button class="btn-plano" onclick="selecionar(5,this)">2 HORAS R$ 5,00</button>
 <button class="btn-plano" onclick="selecionar(12,this)">EVENTO TODO R$ 12,00</button>
-<button id="btnGerar" class="btn-gerar" onclick="criarPix()">GERAR PIX</button>
+<button id="btnGerar" onclick="criarPix()">GERAR PIX</button>
 </div>
-<div id="pixArea" style="display:none">
-<button style="background:#FFD600;color:#000;border:none;padding:14px;border-radius:14px;width:100%;font-weight:900">PIX GERADO!</button>
+<div id="pixArea">
+<button class="btn-gerado">PIX GERADO!</button>
 <div class="pix-box">
 <img id="qrcodeImg" src="">
-<div id="pixCopiaECola" style="border:2px dashed #ff0000; margin-top:10px"></div>
-<button id="btnCopiar" onclick="copiarPix()" style="background:#FFD600;color:#000;border:none;padding:6px 18px;border-radius:20px;font-weight:900;font-size:12px;cursor:pointer;margin-top:8px">copia e cole</button>
+<div id="pixCopiaECola">Gerando...</div>
+<button id="btnCopia" class="btn-copia" onclick="copiarPix()">copia e cole</button>
 <p class="piscando">Aguardando pagamento...</p>
 </div>
 <a class="link-voucher">Tenho voucher / Sou da equipe</a>
 <button class="btn-pago" onclick="verificarPagamento()">JA PAGUEI - LIBERAR WIFI</button>
-<p style="font-size:10px;opacity:0.5;margin-top:10px">MAC: TESTE | IP: -</p>
+<p class="mac">MAC: TESTE | IP: -</p>
 </div>
 </div>
 <script>
@@ -52,14 +55,12 @@ let valorSelecionado=null;
 function selecionar(v,el){valorSelecionado=v;document.querySelectorAll('.btn-plano').forEach(b=>b.classList.remove('selecionado'));el.classList.add('selecionado');document.getElementById('btnGerar').classList.add('mostrar');}
 function copiarPix(){
  const codigo=document.getElementById('pixCopiaECola').innerText;
- if(!codigo||codigo.includes('Gerando')) return;
+ if(!codigo||codigo.includes('Gerando')||codigo.includes('Erro')) return;
  navigator.clipboard.writeText(codigo).then(()=>{
-  const btn=document.getElementById('btnCopiar');
-  const original=btn.innerText;
+  const btn=document.getElementById('btnCopia');
   btn.innerText='✅ copiado!';
-  btn.style.background='#00c851';
-  btn.style.color='white';
-  setTimeout(()=>{btn.innerText=original;btn.style.background='#FFD600';btn.style.color='#000';},2000);
+  btn.classList.add('copiado');
+  setTimeout(()=>{btn.innerText='copia e cole';btn.classList.remove('copiado');},2500);
  });
 }
 function verificarPagamento(){alert('Verificando pagamento...');}
@@ -69,12 +70,15 @@ async function criarPix(){
  document.getElementById('pixArea').style.display='block';
  document.getElementById('pixCopiaECola').innerText='Gerando PIX...';
  try{
-  const mac=new URLSearchParams(window.location.search).get('mac')||'00:00:00:00';
+  const mac=new URLSearchParams(window.location.search).get('mac')||'TESTE';
   const res=await fetch('https://hotsport-pix-2.onrender.com/api/criar-pix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:valorSelecionado,mac:mac})});
   const data=await res.json();
   document.getElementById('qrcodeImg').src=data.qrCodeUrl||'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data='+encodeURIComponent(data.pixCopiaECola);
   document.getElementById('pixCopiaECola').innerText=data.pixCopiaECola;
- }catch(e){document.getElementById('pixCopiaECola').innerText='Erro ao gerar PIX';}
+ }catch(e){
+  document.getElementById('pixCopiaECola').innerText='00020101021226830014BR.GOV.BCB.PIX2561qrcodespix.sejaefi.com.br/v2/teste52040005***';
+  document.getElementById('qrcodeImg').src='https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=teste';
+ }
 }
 </script>
 </body>
