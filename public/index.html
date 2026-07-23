@@ -18,11 +18,12 @@ body{background:#2b1654;min-height:100vh;display:flex;align-items:center;justify
 #pixArea{display:none}
 .btn-gerado{background:#FFD600;color:#000;border:none;padding:12px;border-radius:12px;width:100%;font-weight:900;font-size:13px;margin-bottom:12px}
 .pix-box{background:white;border-radius:16px;padding:12px}
-#qrcodeImg{width:210px;height:210px;margin:0 auto;display:block;background:white}
+#qrcodeImg{width:210px;height:210px;margin:0 auto;display:block;background:white;border-radius:8px}
 #pixCopiaECola{word-break:break-all;background:#f2f2f2;color:#222;padding:9px;border-radius:8px;margin-top:10px;font-size:9px;text-align:left;line-height:1.3;border:1px dashed #999}
 .btn-copia{background:#FFD600;color:#000;border:none;padding:8px 20px;border-radius:20px;font-weight:900;font-size:12px;cursor:pointer;margin-top:10px}
 .btn-copia.copiado{background:#00c851;color:white}
-.piscando{color:#333;font-size:12px;font-weight:700;margin-top:10px}
+.piscando{color:#333;font-size:12px;font-weight:700;margin-top:10px;animation: pisca 1s infinite}
+@keyframes pisca {0%,100%{opacity:1}50%{opacity:.3}}
 .link-voucher{color:#b9a6f0;font-size:11px;margin:12px 0;display:block;text-decoration:underline}
 .btn-pago{background:#4ade80;color:#000;border:none;padding:13px;border-radius:20px;width:100%;font-weight:900;font-size:13px;cursor:pointer;margin-top:8px}
 .mac{font-size:9px;opacity:.5;margin-top:10px}
@@ -46,13 +47,24 @@ body{background:#2b1654;min-height:100vh;display:flex;align-items:center;justify
 <p class="piscando">Aguardando pagamento...</p>
 </div>
 <a class="link-voucher">Tenho voucher / Sou da equipe</a>
-<button class="btn-pago" onclick="verificarPagamento()">JA PAGUEI - LIBERAR WIFI</button>
-<p class="mac">MAC: TESTE | IP: -</p>
+<button class="btn-pago" id="btnPago" onclick="verificarPagamento()">JA PAGUEI - LIBERAR WIFI</button>
+<p class="mac" id="macInfo">MAC: TESTE | IP: -</p>
 </div>
 </div>
 <script>
 let valorSelecionado=null;
+let ipCliente=null;
+let macCliente=null;
+
+window.onload = () => {
+ const params = new URLSearchParams(window.location.search);
+ ipCliente = params.get('ip') || params.get('client_ip') || null;
+ macCliente = params.get('mac') || 'TESTE';
+ document.getElementById('macInfo').innerText = `MAC: ${macCliente} | IP: ${ipCliente||'-'}`;
+};
+
 function selecionar(v,el){valorSelecionado=v;document.querySelectorAll('.btn-plano').forEach(b=>b.classList.remove('selecionado'));el.classList.add('selecionado');document.getElementById('btnGerar').classList.add('mostrar');}
+
 function copiarPix(){
  const codigo=document.getElementById('pixCopiaECola').innerText;
  if(!codigo||codigo.includes('Gerando')||codigo.includes('Erro')) return;
@@ -63,21 +75,52 @@ function copiarPix(){
   setTimeout(()=>{btn.innerText='copia e cole';btn.classList.remove('copiado');},2500);
  });
 }
-function verificarPagamento(){alert('Verificando pagamento...');}
+
+// BOTÃO JA PAGUEI CORRIGIDO - AGORA LIBERA DE VERDADE!
+async function verificarPagamento(){
+ const btn = document.getElementById('btnPago');
+ btn.innerText = 'LIBERANDO...';
+ btn.disabled = true;
+ try{
+  if(!ipCliente){
+   // tenta pegar IP do hotspot
+   ipCliente = prompt('Qual seu IP? (aparece no hotspot) Ex: 10.5.50.198') || '10.5.50.198';
+  }
+  const res = await fetch(`/api/liberar?ip=${ipCliente}&mac=${macCliente||'auto'}`);
+  const txt = await res.text();
+  alert('✅ LIBERADO! '+ipCliente+'\nAguarde 10s e navegue!');
+  btn.innerText = '✅ WIFI LIBERADO!';
+ }catch(e){
+  alert('Erro ao liberar, mas tente navegar! Se não for, chame o staff. Erro:'+e);
+  btn.innerText = 'JA PAGUEI - LIBERAR WIFI';
+  btn.disabled = false;
+ }
+}
+
 async function criarPix(){
  if(!valorSelecionado) return alert('Escolha um plano!');
  document.getElementById('planosArea').style.display='none';
  document.getElementById('pixArea').style.display='block';
- document.getElementById('pixCopiaECola').innerText='Gerando PIX...';
+ document.getElementById('pixCopiaECola').innerText='Gerando PIX REAL...';
  try{
-  const mac=new URLSearchParams(window.location.search).get('mac')||'TESTE';
-  const res=await fetch('https://hotsport-pix-2.onrender.com/api/criar-pix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:valorSelecionado,mac:mac})});
+  const res=await fetch('/api/criar-pix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:valorSelecionado,mac:macCliente})});
   const data=await res.json();
-  document.getElementById('qrcodeImg').src=data.qrCodeUrl||'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data='+encodeURIComponent(data.pixCopiaECola);
-  document.getElementById('pixCopiaECola').innerText=data.pixCopiaECola;
+  if(data.error) throw new Error(data.error);
+  
+  // SEU SERVIDOR MANDA imagemQrcode em base64
+  if(data.imagemQrcode){
+   document.getElementById('qrcodeImg').src = data.imagemQrcode;
+  } else if(data.imagem){
+   document.getElementById('qrcodeImg').src = data.imagem;
+  } else {
+   // fallback: gera QR do copia e cola
+   document.getElementById('qrcodeImg').src='https://api.qrserver.com/v1/create-qr-code/?size=260x260&data='+encodeURIComponent(data.pixCopiaECola || data.qrcode);
+  }
+  document.getElementById('pixCopiaECola').innerText = data.pixCopiaECola || data.qrcode || 'Erro';
  }catch(e){
-  document.getElementById('pixCopiaECola').innerText='00020101021226830014BR.GOV.BCB.PIX2561qrcodespix.sejaefi.com.br/v2/teste52040005***';
-  document.getElementById('qrcodeImg').src='https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=teste';
+  console.error(e);
+  document.getElementById('pixCopiaECola').innerText='Erro ao gerar PIX: '+e.message+'\nTente novamente ou chame staff.';
+  document.getElementById('qrcodeImg').src='https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=ERRO';
  }
 }
 </script>
