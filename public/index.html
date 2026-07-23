@@ -22,6 +22,7 @@ body{background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);min-height:100vh
 #pixCopiaECola{word-break:break-all;background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;margin:10px 0;font-size:11px;text-align:left}
 .btn-copiar{background:#FFD600;color:#000;border:none;padding:14px;border-radius:12px;font-size:16px;font-weight:900;cursor:pointer;width:100%;margin-top:10px}
 .btn-copiar.copiado{background:#00c851;color:white}
+.btn-pago{background:#00d084;color:white;border:none;padding:16px;border-radius:14px;font-size:18px;font-weight:900;cursor:pointer;width:100%;margin-top:15px}
 .piscando{animation: pisca 1.2s infinite; font-weight: bold; margin-top: 10px;}
 @keyframes pisca { 0% {opacity:1} 50% {opacity:0.5} 100% {opacity:1} }
 </style>
@@ -48,7 +49,10 @@ body{background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);min-height:100vh
 <div id="pixCopiaECola"></div>
 <button id="btnCopiar" class="btn-copiar" onclick="copiarPix()">📋 COPIAR CÓDIGO PIX</button>
 <p class="piscando">Aguardando pagamento...</p>
+<a class="link-voucher">Tenho voucher / Sou da equipe</a>
+<button class="btn-pago" onclick="verificarPagamento()">JA PAGUEI - LIBERAR WIFI</button>
 <button onclick="location.reload()" style="margin-top:15px;background:transparent;color:white;border:1px solid white;padding:8px 15px;border-radius:8px">Voltar</button>
+<p style="font-size:11px;opacity:0.6;margin-top:10px">MAC: TESTE | IP: -</p>
 </div>
 </div>
 <script>
@@ -67,6 +71,7 @@ function copiarPix(){
     },3000);
   });
 }
+function verificarPagamento(){ alert('Verificando pagamento...'); }
 async function criarPix(){
  if(!valorSelecionado) return alert('Escolha um plano!');
  document.getElementById('planosArea').style.display='none';
