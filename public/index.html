@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SLS WIFI</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial, sans-serif}
+body{background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);min-height:100vh;display:flex;align-items:center;justify-content:center;color:white;padding:20px}
+.card{background:rgba(255,255,255,0.12);backdrop-filter:blur(12px);padding:30px 25px;border-radius:22px;width:100%;max-width:380px;text-align:center;border:1px solid rgba(255,255,255,0.2)}
+.topo h2{font-size:16px;letter-spacing:2px;margin-bottom:8px;opacity:0.9}
+.topo h1{font-size:36px;font-weight:900;margin-bottom:5px}
+.topo p{font-size:14px;letter-spacing:1px;margin-bottom:25px;opacity:0.8;font-weight:bold}
+.planos{display:grid;gap:12px;margin:20px 0}
+.btn-plano{background:white;color:#1a1a40;border:3px solid transparent;padding:16px;border-radius:14px;font-size:18px;font-weight:900;cursor:pointer}
+.btn-plano.selecionado{border-color:#00ff88;background:#eafff2}
+.btn-gerar{background:#00ff88;color:#0a0a0a;border:none;padding:18px;border-radius:14px;font-size:20px;font-weight:900;cursor:pointer;width:100%;margin-top:10px;display:none}
+.btn-gerar.mostrar{display:block}
+.link-voucher{margin-top:20px;display:block;color:white;opacity:0.8;font-size:14px;text-decoration:underline}
+#pixArea{display:none;margin-top:20px}
+#qrcodeImg{width:260px;height:260px;margin:15px auto;background:white;padding:12px;border-radius:12px;display:block}
+#pixCopiaECola{word-break:break-all;background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;margin:10px 0;font-size:11px;text-align:left}
+.btn-copiar{background:#FFD600;color:#000;border:none;padding:14px;border-radius:12px;font-size:16px;font-weight:900;cursor:pointer;width:100%;margin-top:10px}
+.btn-copiar.copiado{background:#00c851;color:white}
+.piscando{animation: pisca 1.2s infinite; font-weight: bold; margin-top: 10px;}
+@keyframes pisca { 0% {opacity:1} 50% {opacity:0.5} 100% {opacity:1} }
+</style>
+</head>
+<body>
+<div class="card">
+<div class="topo">
+<h2>CONECTE - SE AQUI!!</h2>
+<h1>SLS WIFI</h1>
+<p>INTERNET RAPIDA AQUI</p>
+</div>
+<div id="planosArea">
+<div class="planos">
+<button class="btn-plano" onclick="selecionar(2,this)">1 HORA R$ 2,00</button>
+<button class="btn-plano" onclick="selecionar(5,this)">2 HORAS R$ 5,00</button>
+<button class="btn-plano" onclick="selecionar(12,this)">EVENTO TODO R$ 12,00</button>
+</div>
+<button id="btnGerar" class="btn-gerar" onclick="criarPix()">GERAR PIX</button>
+<a class="link-voucher">Tenho voucher / Sou da equipe</a>
+</div>
+<div id="pixArea">
+<h3 style="background:#FFD600; color:#000; padding:10px; border-radius:10px;">PIX GERADO!</h3>
+<img id="qrcodeImg" src="">
+<div id="pixCopiaECola"></div>
+<button id="btnCopiar" class="btn-copiar" onclick="copiarPix()">📋 COPIAR CÓDIGO PIX</button>
+<p class="piscando">Aguardando pagamento...</p>
+<button onclick="location.reload()" style="margin-top:15px;background:transparent;color:white;border:1px solid white;padding:8px 15px;border-radius:8px">Voltar</button>
+</div>
+</div>
+<script>
+let valorSelecionado=null;
+function selecionar(valor,el){valorSelecionado=valor;document.querySelectorAll('.btn-plano').forEach(b=>b.classList.remove('selecionado'));el.classList.add('selecionado');document.getElementById('btnGerar').classList.add('mostrar');}
+function copiarPix(){
+  const codigo = document.getElementById('pixCopiaECola').innerText;
+  if(!codigo || codigo.includes('Gerando')) return;
+  navigator.clipboard.writeText(codigo).then(()=>{
+    const btn = document.getElementById('btnCopiar');
+    btn.innerText = '✅ COPIADO!';
+    btn.classList.add('copiado');
+    setTimeout(()=>{
+      btn.innerText = '📋 COPIAR CÓDIGO PIX';
+      btn.classList.remove('copiado');
+    },3000);
+  });
+}
+async function criarPix(){
+ if(!valorSelecionado) return alert('Escolha um plano!');
+ document.getElementById('planosArea').style.display='none';
+ document.getElementById('pixArea').style.display='block';
+ document.getElementById('pixCopiaECola').innerText='Gerando PIX...';
+ try{
+  const mac = new URLSearchParams(window.location.search).get('mac') || '00:00:00:00';
+  const res = await fetch('https://hotsport-pix-2.onrender.com/api/criar-pix', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({valor: valorSelecionado, mac: mac})
+  });
+  const data = await res.json();
+  document.getElementById('qrcodeImg').src = data.qrCodeUrl || 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data='+encodeURIComponent(data.pixCopiaECola);
+  document.getElementById('pixCopiaECola').innerText = data.pixCopiaECola;
+ }catch(e){
+  document.getElementById('pixCopiaECola').innerText = 'Erro ao gerar PIX. Tente novamente.';
+  console.log(e);
+ }
+}
+</script>
+</body>
+</html>
