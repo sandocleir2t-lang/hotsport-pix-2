@@ -16,25 +16,25 @@ let liberacoes = [];
 // GARANTE QUE O CERTIFICADO EXISTA (decodifica do BASE64 do Render)
 function garantirCertificado(){
   try{
-    const base64 = process.env.EFI_CERT_BASE64;
+    const base64 = (process.env.EFI_CERT_BASE64 || '').trim();
     const certPath1 = path.join(__dirname, 'certificados', 'hotspot-producao.p12');
     const certPath2 = path.join(__dirname, 'certificado.p12');
     const pastaCert = path.join(__dirname, 'certificados');
     if(!fs.existsSync(pastaCert)) fs.mkdirSync(pastaCert, {recursive:true});
     
     if(base64 && base64.length > 100){
-      // Se já existe e tem tamanho, não recria
-      if(fs.existsSync(certPath1) && fs.statSync(certPath1).size > 1000) return certPath1;
-      const buffer = Buffer.from(base64, 'base64');
+      // Limpa quebras de linha que o Render as vezes coloca
+      const base64Limpo = base64.replace(/\s/g, '');
+      const buffer = Buffer.from(base64Limpo, 'base64');
       fs.writeFileSync(certPath1, buffer);
       fs.writeFileSync(certPath2, buffer);
-      console.log('Certificado criado do BASE64:', certPath1, buffer.length);
+      console.log('[SLS] Certificado criado do BASE64:', certPath1, 'tamanho:', buffer.length);
       return certPath1;
     }
     if(fs.existsSync(certPath1)) return certPath1;
+    if(fs.existsSync(certPath2)) return certPath2;
     if(fs.existsSync(process.env.EFI_CERTIFICATE || '')) return process.env.EFI_CERTIFICATE;
-    if(fs.existsSync(process.env.GN_CERT_PATH || '')) return process.env.GN_CERT_PATH;
-  }catch(e){ console.log('Erro cert:', e.message); }
+  }catch(e){ console.log('[SLS] Erro cert:', e.message); }
   return null;
 }
 
@@ -51,6 +51,7 @@ app.get('/api/liberar',(req,res)=>{
   console.log(`[LIBERADO] ${ip}`);
   res.send(`OK ${ip}`);
 });
+
 app.post('/api/liberar',(req,res)=>{
   const ip=req.body.ip||req.query.ip||req.ip;
   const mac=req.body.mac||'TESTE';
@@ -58,27 +59,33 @@ app.post('/api/liberar',(req,res)=>{
   res.json({sucesso:true});
 });
 
-// CRIAR PIX REAL
+// CRIAR PIX REAL - CORRIGIDO
 app.post('/api/criar-pix', async (req,res)=>{
   let {valor}=req.body;
   valor = Number(valor)||2;
   const valorStr = valor.toFixed(2);
   try{
     const EfiPay = require('sdk-node-apis-efi');
-    const clientIdRaw = (process.env.EFI_CLIENT_ID||'').replace('Client_Id_','').trim();
-    const clientSecretRaw = (process.env.EFI_CLIENT_SECRET||'').replace('Client_Secret_','').trim();
+    
+    // CORREÇÃO PRINCIPAL: NÃO REMOVE O Client_Id_ e Client_Secret_
+    const clientId = (process.env.EFI_CLIENT_ID||'').trim();
+    const clientSecret = (process.env.EFI_CLIENT_SECRET||'').trim();
     const chavePix = (process.env.EFI_CHAVE_PIX || process.env.EFI_PIX_KEY || '50574099000103').trim();
 
     const options = {
       sandbox: false,
-      client_id: clientIdRaw,
-      client_secret: clientSecretRaw,
-      certificate: CERT_FINAL || process.env.EFI_CERTIFICATE || process.env.GN_CERT_PATH,
+      client_id: clientId,
+      client_secret: clientSecret,
+      certificate: CERT_FINAL,
     };
-    console.log('Tentando EFI REAL com cert:', options.certificate, ' chave:', chavePix);
-    if(!options.certificate || !fs.existsSync(options.certificate)) throw new Error('Cert não encontrado');
+    
+    console.log('[SLS] Tentando EFI REAL com cert:', options.certificate, ' | Client_Id:', clientId.substring(0,20)+'...', ' | chave:', chavePix);
+    
+    if(!options.certificate || !fs.existsSync(options.certificate)) throw new Error('Certificado P12 nao encontrado. Verifique EFI_CERT_BASE64 no Render');
+    if(!clientId.startsWith('Client_Id_')) throw new Error('EFI_CLIENT_ID tem que comecar com Client_Id_');
     
     const efipay = new EfiPay(options);
+    
     const body = {
       calendario:{expiracao:3600},
       devedor:{cpf:"12345678909", nome:"Cliente SLS WIFI"},
@@ -86,17 +93,13 @@ app.post('/api/criar-pix', async (req,res)=>{
       chave: chavePix,
       solicitacaoPagador:`SLS WIFI - R$ ${valorStr}`
     };
+    
     const pix = await efipay.pixCreateImmediateCharge([], body);
     const qr = await efipay.pixGenerateQRCode({id: pix.loc.id});
-    console.log('PIX REAL GERADO:', pix.txid);
+    
+    console.log('[SLS] PIX REAL GERADO:', pix.txid);
     return res.json({txid:pix.txid, pixCopiaECola:qr.qrcode, qrcode:qr.qrcode, imagemQrcode:qr.imagemQrcode});
+    
   }catch(e){
-    console.log('Falha EFI REAL:', e.message, e.errors || '');
-    // fallback ainda mostra o erro pra vc ver
-    return res.status(500).json({error:e.message, nome:"json_invalido", mensagem:JSON.stringify(e.errors||e), caminho:"body.devedor"});
-  }
-});
-
-app.post('/api/gerar-pix',(req,res)=>{ req.url='/api/criar-pix'; app.handle(req,res); });
-
-app.listen(PORT,'0.0.0.0',()=>console.log(`SLS WIFI v6 FINAL - CERT: ${CERT_FINAL} - PORTA ${PORT}`));
+    console.log('[SLS] Falha EFI REAL:', e.message, e.nome || '', JSON.stringify(e.errors||'').substring(0,500));
+    return res.status(500).json({error:
