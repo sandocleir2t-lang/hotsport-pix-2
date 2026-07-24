@@ -3,70 +3,160 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SLS WIFI - Internet Rápida Aqui</title>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<title>SLS WIFI - HOTSPOT PIX</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:Inter,Arial,sans-serif}
-body{background:#1e0a4a;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
-.card{background:#3b1e8e;border-radius:20px;padding:22px 20px;width:100%;max-width:360px;box-shadow:0 20px 40px rgba(0,0,0,.4);text-align:center}
-.top{font-size:11px;color:#fff;letter-spacing:2px;font-weight:700;margin-bottom:4px}
-.title{font-size:32px;font-weight:900;color:#fff;line-height:1}
-.sub{font-size:11px;color:#b8a6e6;letter-spacing:1.5px;margin:4px 0 18px;font-weight:600}
-.btn-white{width:100%;background:#fff;border:2px solid #ffcc00;border-radius:12px;padding:14px;font-weight:900;font-size:14px;color:#111;cursor:pointer;margin-bottom:10px}
-.btn-white.selected{background:#fff7cc}
-.btn-yellow{width:100%;background:#ffcc00;border:none;border-radius:12px;padding:15px;font-weight:900;font-size:14px;color:#111;cursor:pointer;margin-top:8px}
-.btn-green{width:100%;background:#4ade80;border:none;border-radius:999px;padding:14px;font-weight:900;font-size:13px;color:#111;cursor:pointer;margin-top:12px}
-.link-voucher{color:#fff;font-size:12px;text-decoration:underline;margin:12px 0;display:inline-block;cursor:pointer}
-.qr-box{background:#fff;border-radius:16px;padding:16px;margin-top:14px;display:none}
-.qr-box.show{display:block}
-#qrcode{display:flex;justify-content:center;margin:12px 0}
-.pixcode{font-size:10px;word-break:break-all;background:#f5f5f5;padding:10px;border-radius:8px;border:1px dashed #ccc;font-family:monospace;text-align:left;max-height:80px;overflow:auto}
-.copy-btn{background:#ffcc00;border:none;border-radius:20px;padding:8px 18px;font-weight:800;font-size:12px;margin-top:10px;cursor:pointer}
+  *{margin:0;padding:0;box-sizing:border-box;font-family:Inter,system-ui,sans-serif}
+  body{background:#0f0a1e;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;color:white}
+  .card{background:linear-gradient(180deg,#2a1a5e 0%,#1a1033 100%);width:100%;max-width:390px;border-radius:24px;padding:28px;border:1px solid #3b2a7a;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .logo{text-align:center;margin-bottom:20px}
+  .logo h1{font-size:32px;font-weight:900;letter-spacing:2px;color:#fff}
+  .logo h1 span{color:#a78bfa}
+  .logo p{color:#8b7bb8;font-size:12px;margin-top:4px;letter-spacing:3px}
+  .plano{background:#1e1342;border:1px solid #3a2a6e;border-radius:16px;padding:16px;margin:20px 0}
+  .plano h3{color:#a78bfa;font-size:14px}
+  .plano .preco{font-size:28px;font-weight:800;margin:6px 0}
+  .plano .detalhe{font-size:12px;color:#9a8ac0}
+  #btn-gerar{width:100%;padding:16px;background:linear-gradient(90deg,#7c3aed,#a78bfa);border:0;border-radius:12px;color:white;font-weight:800;font-size:16px;cursor:pointer;letter-spacing:1px}
+  #btn-gerar:disabled{opacity:.6}
+  #pix-area{display:none;margin-top:22px;text-align:center;animation:fadeIn .4s}
+  #qr-wrap{background:white;padding:12px;border-radius:16px;display:inline-block}
+  #qr-img{width:260px;height:260px;display:block}
+  #pix-copia-cola{background:#0f0a1e;border:1px dashed #3a2a6e;padding:12px;border-radius:10px;margin-top:16px;font-size:11px;word-break:break-all;color:#c4b5fd;text-align:left;max-height:80px;overflow:auto}
+  .btn-sec{width:100%;padding:13px;border-radius:10px;border:0;font-weight:700;cursor:pointer;margin-top:10px}
+  .btn-copy{background:#2a1e4e;color:white;border:1px solid #4a3a7a}
+  .btn-copy:active{background:#3a2a6e}
+  #status-pix{margin-top:14px;font-size:13px;color:#facc15;font-weight:600}
+  .footer{text-align:center;margin-top:20px;font-size:10px;color:#5a4a7a}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
 <div class="card">
-  <div class="top">CONECTE - SE AQUI!!!</div>
-  <div class="title">SLS WIFI 🚀</div>
-  <div class="sub">INTERNET RAPIDA AQUI</div>
-  <button class="btn-white selected" onclick="selectPlan(0)">1 HORA R$ 2,00</button>
-  <button class="btn-white" onclick="selectPlan(1)">2 HORAS R$ 5,00</button>
-  <button class="btn-white" onclick="selectPlan(2)">EVENTO TODO R$ 12,00</button>
-  <button class="btn-yellow" onclick="gerarPix()">GERAR PIX - PAGAR AGORA</button>
-  <a class="link-voucher" onclick="voucher()">Tenho voucher / Sou da equipe</a>
-  <div id="qrArea" class="qr-box">
-    <div style="background:#ffcc00;display:inline-block;padding:6px 14px;border-radius:20px;font-weight:900;font-size:13px;">PIX GERADO!</div>
-    <div id="qrcode"></div>
-    <div id="pixcode" class="pixcode"></div>
-    <button class="copy-btn" onclick="copyPix()">copia e cole</button>
-    <div style="font-size:12px;color:#666;margin-top:8px">Aguardando pagamento...</div>
+  <div class="logo">
+    <h1>SLS <span>WIFI</span></h1>
+    <p>HOTSPOT ULTRA RÁPIDO</p>
   </div>
-  <button class="btn-green" onclick="jaPaguei()">✅ JA PAGUEI - LIBERAR WIFI</button>
-  <div class="footer" id="footer" style="font-size:9px;color:rgba(255,255,255,.5);margin-top:16px">SLS 2026</div>
+
+  <div class="plano">
+    <h3>🔥 ACESSO LIBERADO</h3>
+    <div class="preco">R$ 3,00</div>
+    <div class="detalhe">• Internet ilimitada por 3 horas<br>• Suporte local • Conexão estável</div>
+  </div>
+
+  <button id="btn-gerar">GERAR PIX AGORA</button>
+
+  <!-- AREA DO QR - CORRIGIDA -->
+  <div id="pix-area">
+    <div id="qr-wrap">
+      <img id="qr-img" alt="QR Code PIX Efí" />
+    </div>
+    <div id="pix-copia-cola"></div>
+    <button class="btn-sec btn-copy" onclick="copiarPix()">📋 COPIAR CÓDIGO PIX</button>
+    <p id="status-pix">⏳ Aguardando pagamento...<br><small style="font-weight:400;color:#8b7bb8">Atualiza automático a cada 4s</small></p>
+  </div>
+
+  <div class="footer">SLS WIFI v6.4 FIX • PIX Efí • Render LIVE</div>
 </div>
+
 <script>
-const planos = [{nome:'1 HORA',valor:2},{nome:'2 HORAS',valor:5},{nome:'EVENTO TODO',valor:12}];
-let selecionado=0, currentPix='', clientIp=new URLSearchParams(window.location.search).get('ip')||'', clientMac=new URLSearchParams(window.location.search).get('mac')||'';
-function selectPlan(i){selecionado=i;document.querySelectorAll('.btn-white').forEach((b,idx)=>b.classList.toggle('selected',idx===i));}
-async function gerarPix(){
-  const plano=planos[selecionado];
-  document.getElementById('qrArea').classList.add('show');
-  document.getElementById('qrcode').innerHTML='Gerando PIX real...';
-  document.getElementById('pixcode').innerText='Conectando na Efí...';
-  try{
-    const r=await fetch('/api/criar-pix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:plano.valor})});
-    const data=await r.json();
-    if(data.error) throw new Error(data.error);
-    currentPix=data.pixCopiaECola||data.qrcode;
-    document.getElementById('pixcode').innerText=currentPix;
-    document.getElementById('qrcode').innerHTML='';
-    if(data.imagemQrcode){document.getElementById('qrcode').innerHTML=`<img src="${data.imagemQrcode}" width="180" style="border-radius:8px"/>`;}
-    else{new QRCode(document.getElementById('qrcode'),{text:currentPix,width:180,height:180});}
-  }catch(e){document.getElementById('pixcode').innerText='Erro: '+e.message;}
+// pega params do MikroTik
+const urlParams = new URLSearchParams(window.location.search);
+const mac = urlParams.get('mac') || '';
+const ip = urlParams.get('ip') || '';
+
+let txidGlobal = null;
+let intervaloCheck = null;
+
+async function gerarPix() {
+  const btn = document.getElementById('btn-gerar');
+  btn.innerText = 'GERANDO PIX...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/criar-pix', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mac, ip, valor: 300 }) // R$3,00 = 300 centavos
+    });
+
+    const data = await res.json();
+    console.log('RETORNO EFI:', data);
+
+    if (data.erro || data.error) {
+      throw new Error(data.erro || data.error);
+    }
+
+    if (!data.imagemQrcode) {
+      throw new Error('API não retornou imagemQrcode. Resposta: ' + JSON.stringify(data));
+    }
+
+    // *** CORREÇÃO PRINCIPAL: USA IMAGEM DA EFÍ, SEM LIB EXTERNA ***
+    const qrImg = document.getElementById('qr-img');
+    let base64 = data.imagemQrcode.trim();
+    if (base64.startsWith('data:image')) {
+      qrImg.src = base64;
+    } else {
+      qrImg.src = 'data:image/png;base64,' + base64;
+    }
+
+    document.getElementById('pix-copia-cola').innerText = data.qrcode || data.pixCopiaECola || '';
+    document.getElementById('pix-area').style.display = 'block';
+    document.getElementById('status-pix').style.display = 'block';
+
+    txidGlobal = data.txid;
+
+    if (intervaloCheck) clearInterval(intervaloCheck);
+    intervaloCheck = setInterval(() => checarPagamento(txidGlobal), 4000);
+
+    setTimeout(() => {
+      document.getElementById('pix-area').scrollIntoView({ behavior: 'smooth' });
+    }, 200);
+
+  } catch (e) {
+    alert('Erro ao gerar PIX: ' + e.message);
+    console.error(e);
+    btn.innerText = 'TENTAR NOVAMENTE';
+    btn.disabled = false;
+    return;
+  }
+
+  btn.innerText = 'PIX GERADO ABAIXO ↓';
 }
-function copyPix(){if(!currentPix)return alert('Gere o PIX');navigator.clipboard.writeText(currentPix);alert('Copiado!');}
-async function jaPaguei(){try{await fetch(`/api/liberar?ip=${clientIp}&mac=${clientMac}`);}catch(e){} alert('✅ LIBERADO!'); if(clientIp) window.location.href='http://'+clientIp+'/status'; else window.location.href='https://google.com';}
-function voucher(){jaPaguei();}
+
+function copiarPix() {
+  const codigo = document.getElementById('pix-copia-cola').innerText;
+  navigator.clipboard.writeText(codigo).then(() => {
+    alert('Código PIX copiado! Cola no seu banco.');
+  });
+}
+
+async function checarPagamento(txid) {
+  try {
+    const res = await fetch(`/api/pix?txid=${txid}`);
+    const data = await res.json();
+    console.log('Check:', data);
+
+    if (data.status === 'CONCLUIDA' || data.status === 'RECEBIDO' || data.pago === true) {
+      clearInterval(intervaloCheck);
+      document.getElementById('status-pix').innerHTML = '✅ PAGAMENTO APROVADO!<br>Liberando internet...';
+      document.getElementById('status-pix').style.color = '#22c55e';
+      
+      // LIBERAÇÃO MIKROTIK - ajuste conforme seu login
+      // Se seu MikroTik usa login por mac, use:
+      // window.location.href = `http://10.5.50.1/login?username=${mac}&password=sls&dst=&popup=false`;
+      
+      // por enquanto só avisa
+      setTimeout(() => {
+        alert('Pagamento confirmado! Pode navegar.');
+        // window.location.href = 'http://10.5.50.1/status';
+      }, 1000);
+    }
+  } catch (e) {
+    console.log('Aguardando pagamento...');
+  }
+}
+
+document.getElementById('btn-gerar').addEventListener('click', gerarPix);
 </script>
 </body>
 </html>
