@@ -18,8 +18,7 @@ console.log('EFI_CLIENT_ID existe?', !!process.env.EFI_CLIENT_ID);
 
 // Rota principal - serve o index.html
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
+res.sendFile(path.join(__dirname, 'public', 'index.html'));
 
 // ROTA QUE O INDEX.HTML CHAMA - CRIAR PIX
 app.post('/api/criar-pix', async (req, res) => {
