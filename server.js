@@ -38,7 +38,6 @@ app.post('/api/criar-pix', async (req, res) => {
     const efipay = getEfiInstance();
     const charge = await efipay.pixCreateImmediateCharge([], {
       calendario: { expiracao: 3600 },
-      devedor: { nome: `Cliente SLS ${(mac||'').substring(0,10)}` },
       valor: { original: valorReais },
       chave: process.env.EFI_PIX_KEY,
       solicitacaoPagador: 'SLS WIFI - 3 horas'
