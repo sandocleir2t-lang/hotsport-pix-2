@@ -1,38 +1,60 @@
+// efi.js - SLS WIFI v6.4 FIX
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const EfiPay = require('sdk-node-apis-efi');
 
-function getEfiPay(){
-  const certPath = process.env.EFI_CERT_PATH || path.join(__dirname, 'certificados', 'hotspot-producao.p12');
-  if(!fs.existsSync(certPath)) throw new Error('Certificado nao encontrado: '+certPath);
-  return new EfiPay({
-    sandbox: false,
-    client_id: (process.env.EFI_CLIENT_ID||'').trim(),
-    client_secret: (process.env.EFI_CLIENT_SECRET||'').trim(),
-    certificate: certPath
-  });
+let certPathCache = null;
+
+function getCertPath() {
+  // 1. Se já existe no ENV (Render seta /tmp/efi-cert.p12)
+  if (process.env.EFI_CERT_PATH && fs.existsSync(process.env.EFI_CERT_PATH)) {
+    return process.env.EFI_CERT_PATH;
+  }
+
+  // 2. Se tem BASE64, cria o arquivo em /tmp
+  if (process.env.EFI_CERT_BASE64) {
+    try {
+      const tmpPath = path.join(os.tmpdir(), 'efi-cert.p12');
+      // se já criou antes, reutiliza
+      if (fs.existsSync(tmpPath) && certPathCache) {
+        return tmpPath;
+      }
+      const buffer = Buffer.from(process.env.EFI_CERT_BASE64, 'base64');
+      fs.writeFileSync(tmpPath, buffer);
+      certPathCache = tmpPath;
+      console.log('[EFI] Certificado criado em:', tmpPath);
+      return tmpPath;
+    } catch (err) {
+      console.error('[EFI] Erro ao criar certificado do BASE64:', err);
+      throw err;
+    }
+  }
+
+  // 3. Fallback local (desenvolvimento)
+  const localPath = path.join(__dirname, 'certificado.p12');
+  if (fs.existsSync(localPath)) {
+    return localPath;
+  }
+
+  throw new Error('EFI_CERT_PATH ou EFI_CERT_BASE64 não configurado');
 }
 
-async function criarCobrancaPix(valor){
-  const efipay = getEfiPay();
-  const valorStr = Number(valor).toFixed(2);
-  console.log(`[EFI] Criando R$ ${valorStr}`);
-  const body = {
-    calendario:{expiracao:3600},
-    devedor:{nome:"Cliente SLS WIFI"},
-    valor:{original:valorStr},
-    chave: (process.env.EFI_PIX_KEY||'').trim(),
-    solicitacaoPagador:`SLS WIFI - R$ ${valorStr}`
+function getEfiInstance() {
+  const certPath = getCertPath();
+
+  const options = {
+    sandbox: process.env.EFI_SANDBOX === 'true', // false = produção
+    client_id: process.env.EFI_CLIENT_ID,
+    client_secret: process.env.EFI_CLIENT_SECRET,
+    certificate: certPath,
+    // Algumas versões do SDK precisam de cert_base64 e não path, garantimos os dois
+    cert_base64: false
   };
-  const cobranca = await efipay.pixCreateImmediateCharge([], body);
-  const qrcode = await efipay.pixGenerateQRCode({id: cobranca.loc.id});
-  return {
-    txid: cobranca.txid,
-    pixCopiaECola: qrcode.qrcode,
-    qrcode: qrcode.qrcode,
-    imagemQrcode: qrcode.imagemQrcode,
-    locId: cobranca.loc.id
-  };
+
+  console.log('[EFI] Conectando - Sandbox:', options.sandbox, 'Cert:', certPath);
+  
+  return new EfiPay(options);
 }
 
-module.exports = { criarCobrancaPix };
+module.exports = { getEfiInstance, getCertPath };
