@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, 'public')));
 
 console.log('=== SLS WIFI v6.4 FIX - Iniciando ===');
 console.log('EFI_CERT_PATH:', process.env.EFI_CERT_PATH);
