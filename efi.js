@@ -1,60 +1,77 @@
-// efi.js - SLS WIFI v6.4 FIX
+// efi.js - v6.5 FINAL - Suporta BASE64 com quebra de linha
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const EfiPay = require('sdk-node-apis-efi');
 
-let certPathCache = null;
-
-function getCertPath() {
-  // 1. Se já existe no ENV (Render seta /tmp/efi-cert.p12)
-  if (process.env.EFI_CERT_PATH && fs.existsSync(process.env.EFI_CERT_PATH)) {
-    return process.env.EFI_CERT_PATH;
-  }
-
-  // 2. Se tem BASE64, cria o arquivo em /tmp
-  if (process.env.EFI_CERT_BASE64) {
-    try {
-      const tmpPath = path.join(os.tmpdir(), 'efi-cert.p12');
-      // se já criou antes, reutiliza
-      if (fs.existsSync(tmpPath) && certPathCache) {
-        return tmpPath;
-      }
-      const buffer = Buffer.from(process.env.EFI_CERT_BASE64, 'base64');
-      fs.writeFileSync(tmpPath, buffer);
-      certPathCache = tmpPath;
-      console.log('[EFI] Certificado criado em:', tmpPath);
-      return tmpPath;
-    } catch (err) {
-      console.error('[EFI] Erro ao criar certificado do BASE64:', err);
-      throw err;
-    }
-  }
-
-  // 3. Fallback local (desenvolvimento)
-  const localPath = path.join(__dirname, 'certificado.p12');
-  if (fs.existsSync(localPath)) {
-    return localPath;
-  }
-
-  throw new Error('EFI_CERT_PATH ou EFI_CERT_BASE64 não configurado');
-}
+let efiInstance = null;
 
 function getEfiInstance() {
-  const certPath = getCertPath();
+  if (efiInstance) return efiInstance;
 
-  const options = {
-    sandbox: process.env.EFI_SANDBOX === 'true', // false = produção
-    client_id: process.env.EFI_CLIENT_ID,
-    client_secret: process.env.EFI_CLIENT_SECRET,
-    certificate: certPath,
-    // Algumas versões do SDK precisam de cert_base64 e não path, garantimos os dois
-    cert_base64: false
-  };
+  try {
+    const EfiPay = require('sdk-node-apis-efi');
+    // Alguns projetos usam gn-api, tenta fallback
+    // const EfiPay = require('gn-api-sdk-node') || require('sdk-node-apis-efi');
 
-  console.log('[EFI] Conectando - Sandbox:', options.sandbox, 'Cert:', certPath);
-  
-  return new EfiPay(options);
+    // Pega certificado de qualquer variável que existir
+    let certBase64 = process.env.EFI_CERT_BASE64 || process.env.EFI_CERTIFICATE || process.env.EFI_CERTIFICADO || '';
+    
+    // Limpa sujeira que vem do Render
+    certBase64 = certBase64
+      .replace(/-----BEGIN CERTIFICATE-----/g, '')
+      .replace(/-----END CERTIFICATE-----/g, '')
+      .replace(/\s/g, '') // remove espaço, quebra de linha, \n
+      .trim();
+
+    if (!certBase64) {
+      throw new Error('EFI_CERT_BASE64 vazio! Configure no Render.');
+    }
+
+    // Tenta decodificar pra ver se é base64 válido
+    let certBuffer;
+    try {
+      certBuffer = Buffer.from(certBase64, 'base64');
+    } catch (e) {
+      throw new Error('EFI_CERT_BASE64 não é um base64 válido. Gere de novo.');
+    }
+
+    if (certBuffer.length < 1000) {
+      throw new Error(`Certificado muito pequeno (${certBuffer.length} bytes). Base64 incorreto.`);
+    }
+
+    // Salva em /tmp que é gravável no Render
+    const certPath = path.join(os.tmpdir(), 'certificado-efi.p12');
+    fs.writeFileSync(certPath, certBuffer);
+    
+    console.log(`[EFI] Certificado salvo em ${certPath} - ${certBuffer.length} bytes`);
+
+    const isSandbox = (process.env.EFI_SANDBOX || 'false').toString().toLowerCase() === 'true';
+
+    const options = {
+      sandbox: isSandbox,
+      client_id: process.env.EFI_CLIENT_ID,
+      client_secret: process.env.EFI_CLIENT_SECRET,
+      certificate: certPath,
+      cert_base64: false
+    };
+
+    if (!options.client_id || !options.client_secret) {
+      throw new Error('EFI_CLIENT_ID ou EFI_CLIENT_SECRET vazios');
+    }
+    if (!process.env.EFI_PIX_KEY) {
+      throw new Error('EFI_PIX_KEY vazio');
+    }
+
+    console.log(`[EFI] Iniciando - Sandbox: ${isSandbox} - Client: ${options.client_id.substring(0,10)}...`);
+
+    efiInstance = new EfiPay(options);
+    return efiInstance;
+
+  } catch (err) {
+    console.error('[EFI FATAL]', err.message);
+    // Lança erro real pra aparecer no /api/criar-pix em vez de efi:null
+    throw err;
+  }
 }
 
-module.exports = { getEfiInstance, getCertPath };
+module.exports = { getEfiInstance };
