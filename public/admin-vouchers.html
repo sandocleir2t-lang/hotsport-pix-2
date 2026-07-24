@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SLS WIFI - Admin Vouchers</title>
+<style>
+body{font-family:Arial;background:#0a0a0a;color:#fff;padding:20px}
+.card{background:#1a1a1a;padding:20px;border-radius:10px;max-width:600px;margin:auto}
+input,button{padding:12px;border-radius:8px;border:none;width:100%;margin:5px 0}
+button{background:#00ff88;color:#000;font-weight:bold;cursor:pointer}
+.voucher{background:#222;padding:10px;margin:5px 0;border-radius:5px;display:flex;justify-content:space-between}
+.usado{opacity:0.4;text-decoration:line-through}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>🎫 SLS WIFI - Criar Vouchers</h2>
+<input id="qtd" type="number" value="10" placeholder="Quantos vouchers?">
+<button onclick="criar()">CRIAR VOUCHERS</button>
+<button onclick="listar()" style="background:#333;color:#fff">ATUALIZAR LISTA</button>
+<div id="lista" style="margin-top:20px"></div>
+</div>
+<script>
+const API = location.origin;
+async function criar(){
+  const qtd = document.getElementById('qtd').value || 10;
+  const res = await fetch(API+'/api/criar-voucher',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qtd:parseInt(qtd)})});
+  const data = await res.json();
+  alert(qtd + ' vouchers criados!');
+  listar();
+}
+async function listar(){
+  const res = await fetch(API+'/api/listar-vouchers');
+  const lista = await res.json();
+  document.getElementById('lista').innerHTML = '<h3>Total: '+lista.length+'</h3>' + lista.reverse().map(v=>`
+    <div class="voucher ${v.used?'usado':''}">
+      <b>${v.code}</b>
+      <span>${v.used ? 'USADO '+ (v.usedByMac||'') : 'DISPONÍVEL'}</span>
+    </div>
+  `).join('');
+}
+listar();
+</script>
+</body>
+</html>
