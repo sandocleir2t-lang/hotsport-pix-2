@@ -145,5 +145,7 @@ app.delete('/api/deletar-voucher/:code', (req, res) => {
   saveVouchers(lista);
   return res.json({ ok: true, lista });
 });
-
+app.get('/ha/check', (req,res) => res.send('OK'));
+app.get('/check', (req,res) => res.send('OK'));
+app.get('/ha/*', (req,res) => res.send('OK'));
 app.listen(PORT, () => console.log(`RODANDO v6.5 VOUCHER FIX porta ${PORT}`));
