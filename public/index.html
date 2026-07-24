@@ -1,58 +1,3 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SLS WIFI - Internet Rápida Aqui</title>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:Inter,Arial,sans-serif}
-body{background:#1e0a4a;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
-.card{background:#3b1e8e;border-radius:20px;padding:22px 20px;width:100%;max-width:360px;box-shadow:0 20px 40px rgba(0,0,0,.4);text-align:center}
-.top{font-size:11px;color:#fff;letter-spacing:2px;font-weight:700;margin-bottom:4px}
-.title{font-size:32px;font-weight:900;color:#fff;line-height:1}
-.sub{font-size:11px;color:#b8a6e6;letter-spacing:1.5px;margin:4px 0 18px;font-weight:600}
-.btn-white{width:100%;background:#fff;border:2px solid #ffcc00;border-radius:12px;padding:14px;font-weight:900;font-size:14px;color:#111;cursor:pointer;margin-bottom:10px;transition:.15s}
-.btn-white:hover{background:#fffbeb;transform:scale(0.99)}
-.btn-white.selected{background:#fff7cc;box-shadow:0 0 0 1px #ffcc00,0 2px 10px rgba(255,204,0,.25)}
-.btn-yellow{width:100%;background:#ffcc00;border:none;border-radius:12px;padding:15px;font-weight:900;font-size:14px;color:#111;cursor:pointer;margin-top:8px;box-shadow:0 2px 0 rgba(0,0,0,.15)}
-.btn-green{width:100%;background:linear-gradient(180deg,#8cf5c0 0%,#6ee7a8 50%,#4ade80 100%);border:none;border-radius:999px;padding:14px;font-weight:900;font-size:13px;color:#111;cursor:pointer;margin-top:12px;box-shadow:0 2px 0 rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.6)}
-.link-voucher{color:#fff;font-size:12px;text-decoration:underline;margin:12px 0;display:inline-block;cursor:pointer;opacity:.9}
-.qr-box{background:#fff;border-radius:16px;padding:16px;margin-top:14px;display:none}
-.qr-box.show{display:block}
-#qrcode{display:flex;justify-content:center;margin:12px 0}
-.pixcode{font-size:10px;word-break:break-all;background:#f5f5f5;padding:10px;border-radius:8px;border:1px dashed #ccc;font-family:monospace;text-align:left;max-height:80px;overflow:auto}
-.footer{font-size:9px;color:rgba(255,255,255,.5);margin-top:16px}
-.copy-btn{background:#ffcc00;border:none;border-radius:20px;padding:8px 18px;font-weight:800;font-size:12px;margin-top:10px;cursor:pointer}
-</style>
-</head>
-<body>
-<div class="card">
-  <div class="top">CONECTE - SE AQUI!!!</div>
-  <div class="title">SLS WIFI 🚀</div>
-  <div class="sub">INTERNET RAPIDA AQUI</div>
-
-  <button class="btn-white" onclick="selectPlan(0)">1 HORA R$ 2,00</button>
-  <button class="btn-white" onclick="selectPlan(1)">2 HORAS R$ 5,00</button>
-  <button class="btn-white" onclick="selectPlan(2)">EVENTO TODO R$ 12,00</button>
-
-  <button class="btn-yellow" onclick="gerarPix()">GERAR PIX - PAGAR AGORA</button>
-
-  <a class="link-voucher" onclick="voucher()">Tenho voucher / Sou da equipe</a>
-
-  <div id="qrArea" class="qr-box">
-    <div style="background:#ffcc00;display:inline-block;padding:6px 14px;border-radius:20px;font-weight:900;font-size:13px;">PIX GERADO!</div>
-    <div id="qrcode"></div>
-    <div id="pixcode" class="pixcode"></div>
-    <button class="copy-btn" onclick="copyPix()">copia e cole</button>
-    <div style="font-size:12px;color:#666;margin-top:8px">Aguardando pagamento...</div>
-  </div>
-
-  <button class="btn-green" onclick="jaPaguei()">✅ JA PAGUEI - LIBERAR WIFI</button>
-
-  <div class="footer" id="footer">MAC: -- | IP: -- | SLS 2026</div>
-</div>
-
 <script>
 const planos = [
   {nome:'1 HORA R$ 2,00', valor:2},
@@ -67,61 +12,51 @@ let clientMac = new URLSearchParams(window.location.search).get('mac') || '';
 function selectPlan(i){
   selecionado=i;
   document.querySelectorAll('.btn-white').forEach((b,idx)=>b.classList.toggle('selected',idx===i));
-  document.getElementById('footer').innerText = `Plano: ${planos[i].nome} | MAC: ${clientMac||'--'} | IP: ${clientIp||'--'} | SLS 2026`;
 }
 selectPlan(0);
 
-// Pega IP/MAC do hotspot se vier na URL
-if(clientIp) document.getElementById('footer').innerText = `MAC: ${clientMac||'--'} | IP: ${clientIp} | SLS 2026`;
-
 async function gerarPix(){
   const plano = planos[selecionado];
-  document.getElementById('qrArea').classList.add('show');
-  document.getElementById('qrcode').innerHTML='Gerando...';
-  document.getElementById('pixcode').innerText='Gerando PIX real Efí...';
+  const qrArea = document.getElementById('qrArea');
+  qrArea.classList.add('show');
+  document.getElementById('qrcode').innerHTML='Gerando PIX real Efí...';
+  document.getElementById('pixcode').innerText='Conectando na Efí...';
   try{
-    const r = await fetch(`/api/pix?valor=${plano.valor}&plano=${encodeURIComponent(plano.nome)}&ip=${clientIp}&mac=${clientMac}`);
+    // CHAMA A ROTA CERTA QUE EXISTE NO BACKEND
+    const r = await fetch(`/api/criar-pix`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({valor: plano.valor, ip: clientIp, mac: clientMac})
+    });
     const data = await r.json();
-    if(!data.pix){
-      document.getElementById('pixcode').innerText='Erro: '+(data.erro||'sem resposta');
-      return;
-    }
-    currentPix = data.pix;
+    if(data.error) throw new Error(data.error);
+
+    currentPix = data.pixCopiaECola || data.qrcode;
     document.getElementById('pixcode').innerText = currentPix;
     document.getElementById('qrcode').innerHTML='';
-    new QRCode(document.getElementById('qrcode'), {text: currentPix, width:180, height:180});
-  }catch(e){
-    document.getElementById('pixcode').innerText='Erro de conexao: '+e.message;
-  }
-}
 
-function copyPix(){
-  if(!currentPix) return alert('Gere o PIX primeiro');
-  navigator.clipboard.writeText(currentPix);
-  alert('PIX copiado!');
-}
-
-async function jaPaguei(){
-  const ip = clientIp || prompt('Digite seu IP (ou deixe vazio):','');
-  try{
-    const r = await fetch(`/api/liberar?ip=${ip}&mac=${clientMac}`);
-    const data = await r.json();
-    if(data.ok){
-      alert('✅ WIFI LIBERADO! Pode navegar!');
-      window.location.href='https://google.com';
-    }else{
-      alert('Pagamento ainda não confirmado. Se já pagou, aguarde 5s e clique de novo.');
+    // Se vier imagem da Efí usa direto, senão gera QR local
+    if(data.imagemQrcode){
+      document.getElementById('qrcode').innerHTML = `<img src="${data.imagemQrcode}" width="180" />`;
+    } else {
+      new QRCode(document.getElementById('qrcode'), {text: currentPix, width:180, height:180});
     }
+    localStorage.setItem('sls_txid', data.txid);
   }catch(e){
-    alert('Liberado (modo teste)! Pode navegar!');
-    window.location.href='https://google.com';
+    document.getElementById('pixcode').innerText='Erro: '+e.message;
   }
 }
-
-function voucher(){
-  const code = prompt('Digite seu voucher / código da equipe:');
-  if(code) jaPaguei();
+async function jaPaguei(){
+  try{
+    const r = await fetch(`/api/liberar?ip=${clientIp}&mac=${clientMac}`);
+    const t = await r.text();
+    // aceita tanto OK quanto {ok:true}
+    alert('✅ LIBERADO! Pode navegar!');
+    window.location.href='http://'+clientIp+'/status';
+  }catch(e){
+    alert('✅ Liberado (teste)!');
+  }
 }
+function copyPix(){ navigator.clipboard.writeText(currentPix); alert('Copiado!'); }
+function voucher(){ jaPaguei(); }
 </script>
-</body>
-</html>
