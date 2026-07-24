@@ -1,8 +1,7 @@
-// server.js - SLS WIFI v6.5 FINAL - COM VOUCHER FIX
+// server.js - SLS WIFI v6.4 FIX - HOTSPOT PIX + EFI
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
 const { getEfiInstance } = require('./efi');
 
 const app = express();
@@ -10,142 +9,113 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-
-// serve RAIZ e PUBLIC
 app.use(express.static(path.join(__dirname)));
-app.use(express.static(path.join(__dirname, 'public')));
 
-console.log('=== SLS WIFI v6.5 FINAL + VOUCHER ===');
+console.log('=== SLS WIFI v6.4 FIX - Iniciando ===');
+console.log('EFI_CERT_PATH:', process.env.EFI_CERT_PATH);
+console.log('EFI_CERT_BASE64 existe?', !!process.env.EFI_CERT_BASE64);
+console.log('EFI_CLIENT_ID existe?', !!process.env.EFI_CLIENT_ID);
 
-// --- BANCO DE VOUCHER SIMPLES EM ARQUIVO ---
-const VOUCHER_FILE = path.join(__dirname, 'vouchers.json');
-function loadVouchers() {
-  try {
-    if (!fs.existsSync(VOUCHER_FILE)) return [];
-    return JSON.parse(fs.readFileSync(VOUCHER_FILE, 'utf8'));
-  } catch { return []; }
-}
-function saveVouchers(list) {
-  fs.writeFileSync(VOUCHER_FILE, JSON.stringify(list, null, 2));
-}
-
+// Rota principal - serve o index.html
 app.get('/', (req, res) => {
-  const pathPublic = path.join(__dirname, 'public', 'index.html');
-  const pathRoot = path.join(__dirname, 'index.html');
-  if (fs.existsSync(pathPublic)) return res.sendFile(pathPublic);
-  if (fs.existsSync(pathRoot)) return res.sendFile(pathRoot);
-  return res.status(404).send('SLS WIFI - index.html nao encontrado');
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.get('/health', (req, res) => res.json({ status: 'LIVE', versao: 'v6.5-voucher-fix', vouchers: loadVouchers().length }));
-
-// --- ROTAS PIX (SUAS ORIGINAIS) ---
+// ROTA QUE O INDEX.HTML CHAMA - CRIAR PIX
 app.post('/api/criar-pix', async (req, res) => {
   try {
     const { mac, ip, valor } = req.body;
-    const valorReais = ((valor || 300) / 100).toFixed(2);
-    console.log(`[PIX] Gerando R$${valorReais} MAC:${mac}`);
+    const valorCentavos = valor || 300; // R$3,00 padrão
+    const valorReais = (valorCentavos / 100).toFixed(2);
+
+    console.log(`[PIX] Gerando PIX de R$${valorReais} para MAC: ${mac} IP: ${ip}`);
+
     const efipay = getEfiInstance();
-    const charge = await efipay.pixCreateImmediateCharge([], {
-      calendario: { expiracao: 3600 },
+
+    // 1. Cria a cobrança imediata
+    const bodyCharge = {
+      calendario: { expiracao: 3600 }, // 1 hora pra pagar
+      devedor: { nome: `Cliente SLS WIFI ${mac || 'anon'}`.substring(0, 30) },
       valor: { original: valorReais },
-      chave: process.env.EFI_PIX_KEY,
-      solicitacaoPagador: 'SLS WIFI - 3 horas'
-    });
+      chave: process.env.EFI_PIX_KEY, // sua chave PIX da Efí
+      solicitacaoPagador: 'SLS WIFI - Acesso 3 horas',
+      infoAdicionais: [
+        { nome: 'MAC', valor: mac || 'nao-informado' },
+        { nome: 'IP', valor: ip || 'nao-informado' }
+      ]
+    };
+
+    const charge = await efipay.pixCreateImmediateCharge([], bodyCharge);
+    console.log('[PIX] Cobrança criada:', charge.txid);
+
+    // 2. Gera o QRCode (aqui vem a imagemQrcode)
     const qrcode = await efipay.pixGenerateQRCode({ id: charge.loc.id });
+    console.log('[PIX] QRCode gerado');
+
+    // 3. Retorna no formato que o front novo espera
     return res.json({
       txid: charge.txid,
-      qrcode: qrcode.qrcode,
+      locId: charge.loc.id,
+      qrcode: qrcode.qrcode, // copia e cola
       pixCopiaECola: qrcode.qrcode,
-      imagemQrcode: qrcode.imagemQrcode,
+      imagemQrcode: qrcode.imagemQrcode, // <-- ESSENCIAL PRO FRONT
       valor: valorReais
     });
+
   } catch (err) {
-    console.error('[ERRO PIX]', err);
-    return res.status(500).json({ erro: err.message, efi: err.response?.data || null });
+    console.error('[ERRO /api/criar-pix]', err);
+    return res.status(500).json({ 
+      erro: err.message, 
+      detalhes: err.stack,
+      response: err.response?.data || null
+    });
   }
 });
 
+// Alias antigo que seu index antigo chamava
+app.post('/api/gerar-pix', (req, res) => {
+  // redireciona pra nova rota
+  req.url = '/api/criar-pix';
+  app.handle(req, res);
+});
+
+// CHECK DE PAGAMENTO - o front chama a cada 4s
 app.get('/api/pix', async (req, res) => {
   try {
     const { txid } = req.query;
+    if (!txid) return res.status(400).json({ erro: 'txid obrigatório' });
+
     const efipay = getEfiInstance();
     const result = await efipay.pixDetailCharge({ txid });
-    if (result.status === 'CONCLUIDA') return res.json({ status: 'CONCLUIDA', pago: true });
+
+    console.log(`[CHECK] ${txid} status: ${result.status}`);
+
+    // Se pago, aqui você pode liberar no MikroTik via API se quiser
+    if (result.status === 'CONCLUIDA') {
+      return res.json({ status: 'CONCLUIDA', pago: true, dados: result });
+    }
+
     return res.json({ status: result.status, pago: false });
-  } catch (e) {
+
+  } catch (err) {
+    console.error('[ERRO /api/pix]', err.message);
+    // se txid não existe ainda, retorna pendente
     return res.json({ status: 'ATIVA', pago: false });
   }
 });
 
-// --- ROTAS VOUCHER - NOVO - SEM MIKROTIK_HOST ---
-app.post('/api/usar-voucher', (req, res) => {
-  const { voucher, mac } = req.body;
-  console.log(`[VOUCHER] Tentativa: ${voucher} MAC:${mac}`);
-  if (!voucher) return res.json({ ok: false, erro: 'Voucher vazio' });
-
-  const codigo = voucher.trim().toUpperCase();
-  const lista = loadVouchers();
-  const encontrado = lista.find(v => v.code.toUpperCase() === codigo);
-
-  if (!encontrado) {
-    console.log(`[VOUCHER] Invalido: ${codigo}`);
-    return res.json({ ok: false, erro: 'Voucher inválido' });
-  }
-  if (encontrado.used) {
-    console.log(`[VOUCHER] Ja usado: ${codigo}`);
-    return res.json({ ok: false, erro: 'Voucher já usado' });
-  }
-
-  // Marca como usado
-  encontrado.used = true;
-  encontrado.usedAt = new Date().toISOString();
-  encontrado.usedByMac = mac || 'desconhecido';
-  saveVouchers(lista);
-
-  console.log(`[VOUCHER] LIBERADO: ${codigo}`);
-
-  // Retorna login/senha IGUAL ao voucher - seu MikroTik tem que ter usuario = voucher com senha = voucher
-  // OU o frontend vai fazer o auto-login no hotspot
-  return res.json({ 
-    ok: true, 
-    mensagem: 'Voucher liberado! Conectando...',
-    login: encontrado.code,
-    senha: encontrado.code,
-    hotspot_user: encontrado.code,
-    hotspot_pass: encontrado.code
-  });
+app.get('/api/pix/:txid', async (req, res) => {
+  req.query.txid = req.params.txid;
+  return app._router.handle({ ...req, url: `/api/pix?txid=${req.params.txid}`, query: { txid: req.params.txid }, method: 'GET' }, res, () => {});
 });
 
-app.post('/api/criar-voucher', (req, res) => {
-  const { code, qtd } = req.body;
-  const lista = loadVouchers();
-  if (qtd) {
-    // Criar varios aleatorios
-    for(let i=0;i<qtd;i++){
-      const novo = 'SLS' + Math.random().toString(36).substring(2,6).toUpperCase();
-      lista.push({ code: novo, used: false, createdAt: new Date().toISOString() });
-    }
-  } else if (code) {
-    lista.push({ code: code.toUpperCase(), used: false, createdAt: new Date().toISOString() });
-  } else {
-    return res.json({ ok: false, erro: 'Informe code ou qtd' });
-  }
-  saveVouchers(lista);
-  return res.json({ ok: true, total: lista.length, lista });
+// Webhook da Efí (opcional, mas recomendado)
+app.post('/api/webhook-pix', express.json(), (req, res) => {
+  console.log('[WEBHOOK] Recebido:', JSON.stringify(req.body));
+  // Aqui você pode validar e liberar o cliente
+  res.status(200).end();
 });
 
-app.get('/api/listar-vouchers', (req, res) => {
-  return res.json(loadVouchers());
+app.listen(PORT, () => {
+  console.log(`🚀 SLS WIFI v6.4 rodando na porta ${PORT}`);
 });
-
-app.delete('/api/deletar-voucher/:code', (req, res) => {
-  let lista = loadVouchers();
-  lista = lista.filter(v => v.code.toUpperCase() !== req.params.code.toUpperCase());
-  saveVouchers(lista);
-  return res.json({ ok: true, lista });
-});
-app.get('/ha/check', (req,res) => res.send('OK'));
-app.get('/check', (req,res) => res.send('OK'));
-app.get('/ha/*', (req,res) => res.send('OK'));
-app.listen(PORT, () => console.log(`RODANDO v6.5 VOUCHER FIX porta ${PORT}`));
