@@ -10,70 +10,88 @@ app.use(express.urlencoded({extended:true}));
 
 let filaLiberacao = [];
 let pagamentos = {};
-try{
-  if(fs.existsSync('/tmp/fila.json')) filaLiberacao = JSON.parse(fs.readFileSync('/tmp/fila.json','utf8'));
-  if(fs.existsSync('/tmp/pags.json')) pagamentos = JSON.parse(fs.readFileSync('/tmp/pags.json','utf8'));
-}catch(e){}
-function salvar(){
-  try{
-    fs.writeFileSync('/tmp/fila.json', JSON.stringify(filaLiberacao));
-    fs.writeFileSync('/tmp/pags.json', JSON.stringify(pagamentos));
-  }catch(e){}
-}
-
 let efiInstance = null;
+
 function getEfiInstance(){
   if(efiInstance) return efiInstance;
   const mod = require('sdk-node-apis-efi');
   const EfiPay = mod.EfiPay || mod.default || mod;
+
   let certPath;
+  // NOVO: Pega do Render Environment
   const base64 = process.env.EFI_CERTIFICADO_BASE64 || process.env.EFI_CERT_BASE64;
+
   if(base64){
-    const buf = Buffer.from(base64.replace(/\s/g, ''), 'base64');
-    certPath = '/tmp/efi-cert.p12';
-    fs.writeFileSync(certPath, buf);
+    try {
+      const cleanBase64 = base64.replace(/\s/g, '');
+      const buf = Buffer.from(cleanBase64, 'base64');
+      certPath = '/tmp/efi-cert.p12';
+      fs.writeFileSync(certPath, buf);
+      console.log("[CERT] Criado a partir de ENV", buf.length, "bytes ->", certPath);
+    } catch(e) {
+      console.error("[CERT ERRO] Falha ao decodificar base64", e.message);
+    }
   } else {
+    // Fallback local (quando roda no seu PC)
     const local1 = path.join(__dirname, 'certs', 'hotspot-producao.p12');
+    const local2 = path.join(__dirname, 'certs', 'certificado.p12');
     if(fs.existsSync(local1)) certPath = local1;
-    else certPath = './certs/certificado.p12';
+    else if(fs.existsSync(local2)) certPath = local2;
+    else certPath = process.env.EFI_CERT_PATH || './certs/certificado.p12';
   }
-  const options = { sandbox: false, client_id: process.env.EFI_CLIENT_ID, client_secret: process.env.EFI_CLIENT_SECRET, certificate: certPath };
+
+  if(!certPath ||!fs.existsSync(certPath)){
+    throw new Error('Certificado não encontrado em '+certPath);
+  }
+
+  const options = {
+    sandbox: false,
+    client_id: process.env.EFI_CLIENT_ID,
+    client_secret: process.env.EFI_CLIENT_SECRET,
+    certificate: certPath,
+  };
   efiInstance = new EfiPay(options);
+  console.log("[EFI] OK Cert", fs.readFileSync(certPath).length, "bytes");
   return efiInstance;
 }
 
+// API - TEM QUE VIR ANTES DO STATIC E DO *
 app.get('/api/liberacoes',(req,res)=>{
-  try{
-    if(filaLiberacao.length===0 && fs.existsSync('/tmp/fila.json')){
-      const tmp = JSON.parse(fs.readFileSync('/tmp/fila.json','utf8'));
-      if(Array.isArray(tmp) && tmp.length>0) filaLiberacao = tmp;
-    }
-  }catch(e){}
   if(req.query.rsc!==undefined){
     let cmds="";
     filaLiberacao.forEach(f=>{
-      const macSafe = (f.mac||'').trim(); if(!macSafe) return;
-      cmds+=`/ip hotspot user remove [find name="${macSafe}"]\n`;
-      cmds+=`/ip hotspot user add name="${macSafe}" password="${macSafe}" profile=default limit-uptime=2h server=all\n`;
+      cmds+=`/ip hotspot user remove [find name="${f.mac}"]\n`;
+      cmds+=`/ip hotspot user add name="${f.mac}" password="${f.mac}" profile=default limit-uptime=2h server=all\n`;
     });
-    if(cmds==="") cmds=":log info \"SLS: Fila vazia\"\n";
-    res.set('Content-Type','text/plain'); return res.send(cmds);
+    if(cmds==="") cmds=":log info \"SLS fila vazia\"\n";
+    console.log("[RSC] gerado", filaLiberacao.length);
+    res.set('Content-Type','text/plain');
+    return res.send(cmds);
   }
-  if(req.query.clear!==undefined){ filaLiberacao=[]; salvar(); return res.json([]); }
+  if(req.query.clear!==undefined){
+    console.log("[CLEAR] limpando fila", filaLiberacao.length);
+    filaLiberacao=[];
+    return res.json([]);
+  }
+  console.log("[LIBERACOES] fila", filaLiberacao.length, filaLiberacao);
   res.json(filaLiberacao);
 });
 
-app.get('/api/pagamentos', (req,res)=> res.json(pagamentos));
-app.get('/api/debug', (req,res)=> res.json({fila: filaLiberacao, pagamentos}));
-app.get('/api/forcar/:ip/:mac', (req,res)=>{
-  const ip = req.params.ip; const mac = req.params.mac;
-  if(!filaLiberacao.find(x=>x.mac===mac)){
-    filaLiberacao.push({ip, mac, valor:"3.00", txid:"MANUAL", data: new Date().toISOString()}); salvar();
-  }
-  return res.json({ok:true, fila: filaLiberacao});
+app.get('/api/consumido',(req,res)=>{
+  const ip = (req.query.ip||"").trim();
+  console.log("[CONSUMIDO] ip:", ip, "antes:", filaLiberacao.length);
+  filaLiberacao = filaLiberacao.filter(x => x.ip!== ip);
+  console.log("[CONSUMIDO] depois:", filaLiberacao.length);
+  res.send("ok "+ip);
 });
-app.get('/api/consumido',(req,res)=>{ const ip = (req.query.ip||"").trim(); filaLiberacao = filaLiberacao.filter(x => x.ip!== ip); salvar(); res.send("ok "+ip); });
-app.get('/api/reset',(req,res)=>{ filaLiberacao=[]; pagamentos={}; salvar(); res.set('Content-Type','text/plain'); res.send("RESET OK"); });
+
+app.get('/api/reset',(req,res)=>{
+  console.log("[RESET] limpando tudo! antes fila:", filaLiberacao.length);
+  filaLiberacao=[];
+  pagamentos={};
+  res.set('Content-Type','text/plain');
+  res.send("RESET OK");
+});
 
 async function handlerPix(req,res){
   try{
@@ -87,9 +105,10 @@ async function handlerPix(req,res){
     const body = { calendario:{expiracao:3600}, valor:{original: Number(valor).toFixed(2)}, chave: chavePix, solicitacaoPagador: `SLS WIFI ${ip} ${mac}` };
     const charge = await efi.pixCreateImmediateCharge([], body);
     const qr = await efi.pixGenerateQRCode({id: charge.loc.id});
-    pagamentos[charge.txid] = {ip, mac, status:"pendente", txid: charge.txid, valor, criado: Date.now()}; salvar();
-    return res.json({ txid: charge.txid, id: charge.txid, pixCopiaECola: qr.qrcode, qrcode: qr.imagemQrcode });
-  }catch(err){ return res.status(500).json({error: err.message}); }
+    pagamentos[charge.txid] = {ip, mac, status:"pendente", txid: charge.txid, valor, criado: Date.now()};
+    console.log("[PIX OK]", charge.txid, ip, mac, valor);
+    return res.json({ txid: charge.txid, id: charge.txid, pixCopiaECola: qr.qrcode, copiaECola: qr.qrcode, pix: qr.qrcode, qrcode: qr.imagemQrcode, imagemQrcode: qr.imagemQrcode });
+  }catch(err){ console.error("[ERRO PIX]", err.message, err.data||err); return res.status(500).json({error: err.message}); }
 }
 app.post('/api/gerar-pix', handlerPix);
 app.post('/api/criar-pix', handlerPix);
@@ -97,21 +116,36 @@ app.post('/api/pix', handlerPix);
 
 async function handlerStatus(req,res){
   try{
-    const id = (req.params.id || "").trim();
+    const id = (req.params.id || req.params.txid || "").trim();
     const p = pagamentos[id];
-    if(!p){ return res.json({status:"pendente", txid:id}); }
-    if(p.status === "pago"){ return res.json({status:"CONCLUIDA"}); }
+    if(!p){
+      return res.json({status:"pendente"});
+    }
+    if(p.status === "pago"){
+      return res.json({status:"CONCLUIDA", usuario:p.ip, senha:p.mac||"123456"});
+    }
     const efi = getEfiInstance();
     const d = await efi.pixDetailCharge({txid: p.txid});
     if(d.status === "CONCLUIDA"){
-      p.status = "pago"; salvar();
-      if(!filaLiberacao.find(x=>x.ip===p.ip)){ filaLiberacao.push({ip:p.ip, mac:p.mac, valor:p.valor, txid:p.txid, data: new Date().toISOString()}); salvar(); }
-      return res.json({status:"CONCLUIDA"});
+      p.status = "pago";
+      if(!filaLiberacao.find(x=>x.ip===p.ip)){
+        filaLiberacao.push({ip:p.ip, mac:p.mac, valor:p.valor});
+      }
+      console.log("[PAGO]", p.ip, p.mac, "fila agora", filaLiberacao.length);
+      return res.json({status:"CONCLUIDA", usuario:p.ip, senha:p.mac||"123456"});
     }
     return res.json({status: d.status || "pendente"});
-  }catch(e){ return res.json({status:"pendente", erro:e.message}); }
+  }catch(e){
+    console.error("[ERRO STATUS]", e.message);
+    return res.json({status:"pendente"});
+  }
 }
 app.get('/api/status/:id', handlerStatus);
+app.get('/api/status-pix/:id', handlerStatus);
+app.get('/api/status/:txid', handlerStatus);
+
+// STATIC DEPOIS DAS APIS
 app.use(express.static(path.join(__dirname,'public')));
 app.get('*', (req,res)=> res.sendFile(path.join(__dirname,'public','index.html')));
+
 app.listen(PORT,'0.0.0.0',()=>console.log("SLS RODANDO "+PORT));
