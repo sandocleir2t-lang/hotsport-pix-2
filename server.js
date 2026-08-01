@@ -1,127 +1,140 @@
 const express = require('express');
-const path = require('path');
 const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 const app = express();
-const PORT = process.env.PORT || 10000;
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({extended:true}));
 
-let filaLiberacao = [];
-let pagamentos = {};
-let efiInstance = null;
-function getEfiInstance(){
-  if(efiInstance) return efiInstance;
-  const mod = require('sdk-node-apis-efi'); const EfiPay = mod.EfiPay || mod.default || mod;
-  const fs = require('fs');
-  const certPath = process.env.EFI_CERT_PATH || './certs/certificado.p12';
-  if(!fs.existsSync(certPath)){
-    throw new Error('Certificado não encontrado em '+certPath);
-  }
-  const options = {
+app.use(cors({origin: '*'}));
+app.use(express.json());
+app.use(express.static('public'));
+
+// ========== PARTE 1 - EFI USANDO ARQUIVO DA PASTA (NAO MEXER NA PASTA) ==========
+let efi = null;
+let efiErro = null;
+try{
+  const EfiPay = require('sdk-node-apis-efi');
+  const certPath = path.join(__dirname, 'certs', 'hotspot-producao.p12');
+  console.log("Certificado da pasta:", certPath, fs.existsSync(certPath) ? `OK ${fs.statSync(certPath).size} bytes` : "NAO ACHADO");
+  efi = new EfiPay({
     sandbox: false,
     client_id: process.env.EFI_CLIENT_ID,
     client_secret: process.env.EFI_CLIENT_SECRET,
     certificate: certPath,
-  };
-  efiInstance = new EfiPay(options);
-  console.log("[EFI] OK Cert", fs.readFileSync(certPath).length, "bytes");
-  return efiInstance;
+    cert_base64: false
+  });
+  console.log("EFI OK - PRODUCAO");
+}catch(e){ efiErro = e.message; console.error("EFI erro:", e.message); }
+
+// ========== PARTE 2 - PLANOS + VOUCHER ==========
+const PLANOS = {
+  "3.00": { tempo: "1h", profile: "1HORA", nome: "1 HORA" },
+  "5.00": { tempo: "2h", profile: "2HORAS", nome: "2 HORAS" },
+  "12.00": { tempo: "12h", profile: "EVENTO", nome: "EVENTO TODO" }
+};
+
+const VOUCHERS_VALIDOS = {
+  "TESTE10": { senha: "1234", tempo: "1h", profile: "1HORA" },
+  "EVENTO2024": { senha: "evento", tempo: "12h", profile: "EVENTO" }
+};
+
+function getPlano(valor){
+  const v = Number(valor).toFixed(2);
+  return PLANOS[v] || PLANOS["3.00"];
 }
 
-// API - TEM QUE VIR ANTES DO STATIC E DO *
-app.get('/api/liberacoes',(req,res)=>{
-  if(req.query.rsc!==undefined){
-    let cmds="";
-    filaLiberacao.forEach(f=>{
-      cmds+=`/ip hotspot user remove [find name="${f.mac}"]\n`;
-      cmds+=`/ip hotspot user add name="${f.mac}" password="${f.mac}" profile=default limit-uptime=2h server=all\n`;
+// ========== PARTE 3 - LIBERAR MIKROTIK JA PRONTO ==========
+async function liberarMikrotik(mac, plano, obs="PIX"){
+  if(!process.env.MIKROTIK_HOST){
+    console.log("Mikrotik nao configurado - modo teste");
+    return { usuario: "sls_"+Date.now().toString().slice(-4), senha: "1234", tempo: plano.tempo, profile: plano.profile, modo: "teste" };
+  }
+  try{
+    const { RouterOSAPI } = require('node-routeros');
+    const conn = new RouterOSAPI({
+      host: process.env.MIKROTIK_HOST,
+      user: process.env.MIKROTIK_USER || 'admin',
+      password: process.env.MIKROTIK_PASS,
+      port: 8728
     });
-    if(cmds==="") cmds=":log info \"SLS fila vazia\"\n";
-    console.log("[RSC] gerado", filaLiberacao.length);
-    res.set('Content-Type','text/plain');
-    return res.send(cmds);
-  }
-  if(req.query.clear!==undefined){
-    console.log("[CLEAR] limpando fila", filaLiberacao.length);
-    filaLiberacao=[];
-    return res.json([]);
-  }
-  console.log("[LIBERACOES] fila", filaLiberacao.length, filaLiberacao);
-  res.json(filaLiberacao);
-});
-
-app.get('/api/consumido',(req,res)=>{
-  const ip = (req.query.ip||"").trim();
-  console.log("[CONSUMIDO] ip:", ip, "antes:", filaLiberacao.length);
-  filaLiberacao = filaLiberacao.filter(x => x.ip !== ip);
-  console.log("[CONSUMIDO] depois:", filaLiberacao.length);
-  res.send("ok "+ip);
-});
-
-app.get('/api/reset',(req,res)=>{
-  console.log("[RESET] limpando tudo! antes fila:", filaLiberacao.length);
-  filaLiberacao=[];
-  pagamentos={};
-  res.set('Content-Type','text/plain');
-  res.send("RESET OK");
-});
-
-async function handlerPix(req,res){
-  try{
-    const forwarded = req.headers['x-forwarded-for'] || "";
-    const ip = (forwarded.split(',')[0].trim() || req.body.ip || req.ip || "0.0.0.0").trim();
-    const mac = (req.body.mac || "").trim();
-    let valor = (req.body.valor || "3.00").toString().replace("R$","").replace(",",".").trim();
-    if(!valor || isNaN(Number(valor))) valor="3.00";
-    const efi = getEfiInstance();
-    const chavePix = process.env.EFI_PIX_KEY || process.env.EFI_CHAVE_PIX;
-    const body = { calendario:{expiracao:3600}, valor:{original: Number(valor).toFixed(2)}, chave: chavePix, solicitacaoPagador: `SLS WIFI ${ip} ${mac}` };
-    const charge = await efi.pixCreateImmediateCharge([], body);
-    const qr = await efi.pixGenerateQRCode({id: charge.loc.id});
-    pagamentos[charge.txid] = {ip, mac, status:"pendente", txid: charge.txid, valor, criado: Date.now()};
-    console.log("[PIX OK]", charge.txid, ip, mac, valor);
-    return res.json({ txid: charge.txid, id: charge.txid, pixCopiaECola: qr.qrcode, copiaECola: qr.qrcode, pix: qr.qrcode, qrcode: qr.imagemQrcode, imagemQrcode: qr.imagemQrcode });
-  }catch(err){ console.error("[ERRO PIX]", err.message, err.data||err); return res.status(500).json({error: err.message}); }
-}
-app.post('/api/gerar-pix', handlerPix);
-app.post('/api/criar-pix', handlerPix);
-app.post('/api/pix', handlerPix);
-
-async function handlerStatus(req,res){
-  try{
-    const id = (req.params.id || req.params.txid || "").trim();
-    const p = pagamentos[id];
-    if(!p){
-      // Tenta achar por ip se o server reiniciou e perdeu memoria mas cliente ainda polla
-      return res.json({status:"pendente"});
-    }
-    if(p.status === "pago"){
-      return res.json({status:"CONCLUIDA", usuario:p.ip, senha:p.mac||"123456"});
-    }
-    const efi = getEfiInstance();
-    const d = await efi.pixDetailCharge({txid: p.txid});
-    if(d.status === "CONCLUIDA"){
-      p.status = "pago";
-      // Evita duplicado
-      if(!filaLiberacao.find(x=>x.ip===p.ip)){
-        filaLiberacao.push({ip:p.ip, mac:p.mac, valor:p.valor});
-      }
-      console.log("[PAGO]", p.ip, p.mac, "fila agora", filaLiberacao.length);
-      return res.json({status:"CONCLUIDA", usuario:p.ip, senha:p.mac||"123456"});
-    }
-    return res.json({status: d.status || "pendente"});
+    await conn.connect();
+    const usuario = `sls_${Date.now().toString().slice(-5)}`;
+    const senha = Math.random().toString(36).slice(-4);
+    await conn.write('/ip/hotspot/user/add', [
+      `=name=${usuario}`,
+      `=password=${senha}`,
+      `=profile=${plano.profile}`,
+      `=limit-uptime=${plano.tempo}`,
+      `=comment=${obs} R$ ${plano.nome} ${new Date().toLocaleString()} MAC:${mac||''}`
+    ]);
+    await conn.close();
+    console.log(`Mikrotik liberado: ${usuario} / ${senha} / ${plano.tempo}`);
+    return { usuario, senha, tempo: plano.tempo, profile: plano.profile, modo: "mikrotik" };
   }catch(e){
-    console.error("[ERRO STATUS]", e.message);
-    return res.json({status:"pendente"});
+    console.error("Erro Mikrotik:", e.message);
+    return { usuario: "sls_"+Date.now().toString().slice(-4), senha: "1234", tempo: plano.tempo, profile: plano.profile, erro: e.message, modo: "fallback" };
   }
 }
-app.get('/api/status/:id', handlerStatus);
-app.get('/api/status-pix/:id', handlerStatus);
-app.get('/api/status/:txid', handlerStatus);
 
-// STATIC DEPOIS DAS APIS
-app.use(express.static(path.join(__dirname,'public')));
-app.get('*', (req,res)=> res.sendFile(path.join(__dirname,'public','index.html')));
+app.get('/', (req,res)=> res.sendFile(path.join(__dirname, 'public/index.html')));
+app.get('/api/teste', (req,res)=> res.json({ok:true, efi: !!efi, erro: efiErro, planos: PLANOS}));
 
-app.listen(PORT,'0.0.0.0',()=>console.log("SLS RODANDO "+PORT));
+app.post('/api/criar-pix', async (req,res)=>{
+  try{
+    if(!efi) return res.status(500).json({ok:false, erro:"EFI: "+efiErro});
+    const { valor, mac } = req.body;
+    const plano = getPlano(valor || "3.00");
+    const valorFinal = Number(valor || "3.00").toFixed(2);
+    console.log(`PIX R$ ${valorFinal} -> ${plano.nome} -> ${plano.tempo} MAC:${mac}`);
+    const charge = await efi.pixCreateImmediateCharge([],{
+      calendario:{expiracao: 3600},
+      valor:{original: valorFinal},
+      chave: process.env.EFI_CHAVE_PIX,
+      solicitacaoPagador: `SLS WIFI - ${plano.nome}`,
+      infoAdicionais:[{nome:"Plano", valor: plano.nome},{nome:"Tempo", valor: plano.tempo}]
+    });
+    const qr = await efi.pixGenerateQRCode({id: charge.loc.id});
+    return res.json({ok:true, txid: charge.txid, id: charge.loc.id, pixCopiaECola: qr.qrcode, qrcode: qr.qrcode, qrCodeImage: qr.imagemQrcode, valor: valorFinal, plano});
+  }catch(e){ return res.status(500).json({ok:false, erro: e.message}); }
+});
+
+app.get('/api/status-pix/:txid', async (req,res)=>{
+  try{
+    if(!efi) return res.json({pago:false});
+    const { mac } = req.query;
+    const detalhe = await efi.pixDetailCharge({txid: req.params.txid});
+    if(detalhe.status === 'CONCLUIDA'){
+      const plano = getPlano(detalhe.valor.original);
+      const liberacao = await liberarMikrotik(mac, plano, "PIX");
+      return res.json({pago:true, status: detalhe.status, liberacao, plano});
+    }
+    return res.json({pago:false, status: detalhe.status});
+  }catch(e){ return res.json({pago:false, erro:e.message}); }
+});
+
+// ========== VOUCHER FUNCIONANDO ==========
+app.post('/api/validar-voucher', async (req,res)=>{
+  const { codigo, senha, mac } = req.body;
+  const codigoUpper = (codigo||"").toUpperCase().trim();
+  const voucher = VOUCHERS_VALIDOS[codigoUpper];
+  
+  if(!voucher){
+    return res.json({ok:false, erro:"Voucher invalido"});
+  }
+  if(voucher.senha !== (senha||"").trim()){
+    return res.json({ok:false, erro:"Senha do voucher incorreta"});
+  }
+  
+  const plano = { tempo: voucher.tempo, profile: voucher.profile, nome: codigoUpper };
+  const liberacao = await liberarMikrotik(mac, plano, `VOUCHER ${codigoUpper}`);
+  return res.json({ok:true, liberacao, plano, mensagem:"Voucher validado - internet liberada!"});
+});
+
+app.post('/api/gerar-voucher', async (req,res)=>{
+  const { mac, valor } = req.body;
+  const plano = getPlano(valor || "3.00");
+  const lib = await liberarMikrotik(mac, plano, "VOUCHER MANUAL");
+  res.json({ok:true, ...lib});
+});
+
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, ()=> console.log(`SLS WIFI COMPLETO R$3/R$5/R$12 + VOUCHER rodando porta ${PORT}`));
