@@ -1,7 +1,8 @@
 const express = require('express');
 const fs = require('fs');
 const cors = require('cors');
-const EfiPay = require('sdk-node-apis-efi').default;
+const EfiPay = require('sdk-node-apis-efi');
+const Efi = EfiPay.EfiPay || EfiPay.default || EfiPay;
 
 const app = express();
 app.use(cors());
