@@ -1,3 +1,10 @@
+// ADICIONA ESSAS 2 FUNÇÕES NO TOPO
+try{
+  if(fs.existsSync('/tmp/fila.json')) filaLiberacao = JSON.parse(fs.readFileSync('/tmp/fila.json','utf8'));
+}catch(e){}
+function salvarFila(){
+  try{ fs.writeFileSync('/tmp/fila.json', JSON.stringify(filaLiberacao)); }catch(e){}
+}
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
