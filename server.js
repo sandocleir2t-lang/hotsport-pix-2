@@ -22,7 +22,7 @@ res.send(`<!DOCTYPE html>
 <div class="plano" onclick="sel(this,'12.00',1440)"><div><span>EVENTO TODO - 15 MEGA</span><br><small>Ultra rapida o dia todo</small></div><b>R$ 12,00</b></div>
 <button class="btn-gerar" onclick="gerar()">GERAR PIX - PAGAR AGORA</button>
 <div id="pixArea"></div>
-<div style="margin-top:20px"><span style="color:#fff;font-size:12px">TEM VOUCHER?</span><input class="input" placeholder="CODIGO VOUCHER"><input class="input" placeholder="SENHA" type="password"><button class="btn-voucher">ENTRAR COM VOUCHER</button></div>
+<div style="margin-top:20px"><span style="color:#fff;font-size:12px">TEM VOUCHER?</span><input class="input" id="vUser" placeholder="CODIGO VOUCHER"><input class="input" id="vPass" placeholder="SENHA" type="password"><button class="btn-voucher" onclick="loginVoucher()">ENTRAR COM VOUCHER</button></div>
 <div class="footer">SLS WIFI v9 - 5/10/15 MEGA - R$3/5/12</div>
 </div>
 <script>
@@ -64,6 +64,12 @@ function copiarPix(){
  const el=document.getElementById('codePix');
  el.select();el.setSelectionRange(0,99999);
  navigator.clipboard.writeText(el.value).then(()=>{alert('✅ PIX COPIADO! Cola no seu banco agora!')}).catch(()=>{document.execCommand('copy');alert('✅ PIX COPIADO!')});
+}
+function loginVoucher(){
+ const u=document.getElementById('vUser').value;
+ const p=document.getElementById('vPass').value;
+ if(!u||!p){alert('Digite codigo e senha');return;}
+ window.location='/login?username='+encodeURIComponent(u)+'&password='+encodeURIComponent(p);
 }
 </script></body></html>`);
 });
