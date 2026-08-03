@@ -2,19 +2,21 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const EfiPay = require('sdk-node-apis-efi').default;
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
 let filaLiberacao = [];
-let pixDB = {}; // txid -> {ip, mac, valor, status}
+let pixDB = {};
 
-// CARREGA FILA DO DISCO
-try{
-  if(fs.existsSync('/tmp/fila.json')) filaLiberacao = JSON.parse(fs.readFileSync('/tmp/fila.json','utf8'));
-  if(fs.existsSync('/tmp/pix.json')) pixDB = JSON.parse(fs.readFileSync('/tmp/pix.json','utf8'));
-}catch(e){}
+// CARREGA FILA DO DISCO (pra não perder quando Render reinicia)
+try {
+  if (fs.existsSync('/tmp/fila.json')) filaLiberacao = JSON.parse(fs.readFileSync('/tmp/fila.json','utf8'));
+  if (fs.existsSync('/tmp/pix.json')) pixDB = JSON.parse(fs.readFileSync('/tmp/pix.json','utf8'));
+} catch(e){}
 
 function salvarFila(){
   try{
@@ -23,121 +25,116 @@ function salvarFila(){
   }catch(e){}
 }
 
-console.log("SLS 10:21 FIX FINAL");
+console.log("SLS 10:21 FIX FINAL REAL");
 
-// GERAR PIX
+// CONFIG EFI - PEGA DO ENV DO RENDER
+function getEfiInstance(){
+  const certPath = process.env.EFI_CERT_PATH || './certs/certificado.p12';
+  let certificate;
+  try {
+    if (fs.existsSync(certPath)) {
+      certificate = fs.readFileSync(certPath);
+    } else if (process.env.EFI_CERT_BASE64) {
+      certificate = Buffer.from(process.env.EFI_CERT_BASE64, 'base64');
+    }
+  } catch(e){}
+
+  const options = {
+    sandbox: false,
+    client_id: process.env.EFI_CLIENT_ID,
+    client_secret: process.env.EFI_CLIENT_SECRET,
+    certificate,
+    cert_base64: false
+  };
+  return new EfiPay(options);
+}
+
+// 1. GERAR PIX REAL
 app.all('/api/gerar-pix', async (req,res)=>{
   try{
     let {valor, ip, mac} = {...req.query,...req.body};
-    valor = valor || "2.00";
-    ip = ip || req.query.ip;
-    mac = mac || req.query.mac;
-    if(!mac) mac = "58:04:4F:54:64:7C";
-    if(!ip) ip = "10.5.50.199";
+    valor = (valor || "2.00").toString().replace(',','.');
+    ip = ip || "10.5.50.199";
+    mac = mac || "58:04:4F:54:64:7C";
 
-    // AQUI VAI SUA LOGICA DA EFI - vou deixar exemplo que já funciona pro teste
-    const txid = "SLS" + Date.now();
-    // Se você já tem getEfiInstance, use ela aqui. Por enquanto gera PIX FAKE pra testar fila:
-    const pixCopiaECola = "00020101021226830014BR.GOV.BCB.PIX2561qrcodespix.sejaefi.com.br/v2/fake" + txid;
+    const efi = getEfiInstance();
+    const body = {
+      calendario: { expiracao: 3600 },
+      valor: { original: valor },
+      chave: process.env.EFI_PIX_KEY,
+      solicitacaoPagador: `SLS WIFI - ${valor}`
+    };
 
-    pixDB[txid] = {ip, mac, valor, status: "ATIVA", pixCopiaECola, qrcode: ""};
+    const cob = await efi.pixCreateImmediateCharge([], body);
+    const qrcode = await efi.pixGenerateQRCode({ id: cob.loc.id });
+
+    pixDB[cob.txid] = { ip, mac, valor, status: "ATIVA", txid: cob.txid };
     salvarFila();
 
-    // SE TIVER EFI REAL, DESCOMENTA ISSO:
-    /*
-    const efi = getEfiInstance();
-    let cob = await efi.pixCreateImmediateCharge([], {valor:{original:valor}, chave:"SUA_CHAVE", solicitacaoPagador:"SLS WIFI "+valor});
-    pixDB[cob.txid] = {ip, mac, valor, status:"ATIVA",...};
-    return res.json({txid: cob.txid, pixCopiaECola: cob.pixCopiaECola, qrcode: cob.imagemQrcode});
-    */
-
-    res.json({txid, pixCopiaECola, qrcode: "", status:"ATIVA", ip, mac});
+    res.json({
+      txid: cob.txid,
+      pixCopiaECola: qrcode.qrcode,
+      qrcode: qrcode.imagemQrcode,
+      status: "ATIVA",
+      ip, mac
+    });
   }catch(err){
-    res.status(500).json({error: err.message});
+    console.error(err);
+    res.status(500).json({error: err.message || "Erro EFI"});
   }
 });
 
-// STATUS - É ESSE QUE LIBERA QUANDO CLICA JA PAGUEI
+// 2. STATUS - CHAMADO PELO BOTAO JA PAGUEI
 app.get('/api/status/:txid', async (req,res)=>{
   try{
-    let txid = req.params.txid;
-    let dados = pixDB[txid];
-    if(!dados) return res.json({status:"NAO_ENCONTRADO"});
+    const txid = req.params.txid;
+    const dados = pixDB[txid];
+    if(!dados) return res.json({status: "NAO_ENCONTRADO"});
 
-    // TENTA CONSULTAR NA EFI SE TÁ PAGO - se não tiver EFI, considera PAGO quando clica
-    let statusEfi = "CONCLUIDA"; // MOCK - troca por consulta real
+    let consulta;
     try{
-      // const efi = getEfiInstance();
-      // let consulta = await efi.pixDetailCharge({txid});
-      // statusEfi = consulta.status;
-    }catch(e){}
+      const efi = getEfiInstance();
+      consulta = await efi.pixDetailCharge({ txid });
+    }catch(e){
+      console.log("Erro consulta EFI", e.message);
+      return res.json({status: dados.status});
+    }
 
-    // SE CLICOU NO JA PAGUEI, CONSIDERA PAGO E JOGA NA FILA
-    if(statusEfi === "CONCLUIDA" || statusEfi === "pago" || req.query.force){
+    if(consulta.status === "CONCLUIDA"){
       dados.status = "CONCLUIDA";
-      // Adiciona na fila se não existe
       if(!filaLiberacao.find(f=>f.mac===dados.mac)){
-        filaLiberacao.push({ip:dados.ip, mac:dados.mac, txid});
+        filaLiberacao.push({ip: dados.ip, mac: dados.mac, txid});
         salvarFila();
         console.log("FILA ADD VIA STATUS:", dados.mac);
       }
-      return res.json({status:"CONCLUIDA", ip:dados.ip, mac:dados.mac});
+      return res.json({status: "CONCLUIDA", ip: dados.ip, mac: dados.mac});
     }
 
-    res.json({status: dados.status || "ATIVA"});
+    res.json({status: consulta.status});
   }catch(err){
     res.status(500).json({error: err.message});
   }
 });
 
-// WEBHOOK DA EFI
-app.post('/api/webhook-pix', (req,res)=>{
+// 3. WEBHOOK DA EFI (LIBERACAO AUTOMATICA SEM CLICAR)
+app.post('/api/webhook-pix', async (req,res)=>{
   try{
-    let pixs = req.body.pix || [];
-    pixs.forEach(p=>{
-      let d = pixDB[p.txid];
-      if(d){
+    const pixs = req.body.pix || [];
+    for(const p of pixs){
+      const d = pixDB[p.txid];
+      if(d &&!filaLiberacao.find(f=>f.mac===d.mac)){
         d.status = "CONCLUIDA";
-        if(!filaLiberacao.find(f=>f.mac===d.mac)){
-          filaLiberacao.push({ip:d.ip, mac:d.mac, txid:p.txid});
-        }
+        filaLiberacao.push({ip: d.ip, mac: d.mac, txid: p.txid});
+        console.log("FILA ADD VIA WEBHOOK:", d.mac);
       }
-    });
+    }
     salvarFila();
     res.json({ok:true});
   }catch(e){ res.json({ok:true}); }
 });
 
-// LISTA FILA
+// 4. ROTA QUE O MIKROTIK BUSCA A CADA 15s
 app.get('/api/liberacoes', (req,res)=>{
   try{
     if(fs.existsSync('/tmp/fila.json')) filaLiberacao = JSON.parse(fs.readFileSync('/tmp/fila.json','utf8'));
-  }catch(e){}
-
-  if(req.query.rsc!== undefined){
-    if(filaLiberacao.length === 0){
-      return res.type('text/plain').send('/log info "SLS fila vazia"');
-    }
-    let cmds = filaLiberacao.map(f=>`/ip hotspot user remove [find name="${f.mac}"]\n/ip hotspot user add name="${f.mac}" password="${f.mac}" profile=default limit-uptime=2h`).join('\n');
-    return res.type('text/plain').send(cmds);
   }
-  res.json({ok:true, fila: filaLiberacao});
-});
-
-app.get('/api/liberacoes/clear', (req,res)=>{
-  filaLiberacao = [];
-  salvarFila();
-  res.type('text/plain').send('/log info "SLS fila limpa"');
-});
-
-app.get('/api/forcar/:ip/:mac', (req,res)=>{
-  let {ip, mac} = req.params;
-  if(!filaLiberacao.find(f=>f.mac===mac)){
-    filaLiberacao.push({ip, mac, txid:"MANUAL"});
-  }
-  salvarFila();
-  res.json({ok:true, fila: filaLiberacao});
-});
-
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, ()=>console.log("RODANDO PORTA "+PORT));
