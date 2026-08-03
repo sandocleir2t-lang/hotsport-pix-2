@@ -1,93 +1,126 @@
 const express = require('express');
-const fs = require('fs');
 const cors = require('cors');
-const sdk = require('sdk-node-apis-efi');
-const Efi = sdk.EfiPay || sdk.default || sdk;
+const fs = require('fs');
+const EfiPay = require('sdk-node-apis-efi').default;
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
 
-let filaLiberacao = [];
-let pixDB = {};
-try{
-  if(fs.existsSync('/tmp/fila.json')) filaLiberacao = JSON.parse(fs.readFileSync('/tmp/fila.json','utf8'));
-  if(fs.existsSync('/tmp/pix.json')) pixDB = JSON.parse(fs.readFileSync('/tmp/pix.json','utf8'));
-}catch(e){}
+// ===== FIX DEFINITIVO CERTIFICADO - hotspot-producao.p12 =====
+const CERT_PATH = '/tmp/hotspot-producao.p12';
 
-function salvarFila(){
-  try{
-    fs.writeFileSync('/tmp/fila.json', JSON.stringify(filaLiberacao));
-    fs.writeFileSync('/tmp/pix.json', JSON.stringify(pixDB));
-  }catch(e){}
+function garanteCertificado() {
+  try {
+    const base64 = process.env.EFI_CERTIFICADO_BASE64;
+    if (!base64) throw new Error('EFI_CERTIFICADO_BASE64 não definida no Render');
+
+    // Limpa quebras de linha e espaços que o Render adiciona
+    const limpo = base64.replace(/\s/g, '');
+    const buffer = Buffer.from(limpo, 'base64');
+    
+    fs.writeFileSync(CERT_PATH, buffer);
+    console.log('✅ CERTIFICADO SALVO:', CERT_PATH, '| Tamanho:', buffer.length, 'bytes');
+  } catch (e) {
+    console.error('❌ ERRO AO SALVAR CERTIFICADO:', e.message);
+  }
 }
+garanteCertificado();
 
-function getEfi(){
-  const b64 = process.env.EFI_CERTIFICADO_BASE64 || process.env.EFI_CERT_BASE64;
-  let cert = null;
-  if(b64) cert = Buffer.from(b64, 'base64');
-  return new Efi({
-    sandbox: false,
-    client_id: process.env.EFI_CLIENT_ID,
-    client_secret: process.env.EFI_CLIENT_SECRET,
-    certificate: cert
-  });
-}
+const efiOptions = {
+  sandbox: false, // false = PRODUÇÃO / LIVE
+  client_id: process.env.EFI_CLIENT_ID,
+  client_secret: process.env.EFI_CLIENT_SECRET,
+  certificado: CERT_PATH,
+  pixCert: CERT_PATH
+};
 
-app.all('/api/gerar-pix', async (req,res)=>{
-  try{
-    let {valor, ip, mac} = {...req.query,...req.body};
-    valor = String(valor||"2.00");
-    ip = ip || "10.5.50.199";
-    mac = mac || "58:04:4F:54:64:7C";
-    const efi = getEfi();
-    const cob = await efi.pixCreateImmediateCharge([], {
-      calendario:{expiracao:3600},
-      valor:{original:valor},
-      chave: process.env.EFI_CHAVE_PIX || process.env.EFI_PIX_KEY,
-      solicitacaoPagador:"SLS WIFI"
+// ===== FILA VIA STATUS =====
+let fila = [];
+
+app.get('/', (req, res) => res.send('SLS WIFI - ONLINE - PIX REAL'));
+
+app.post('/criar-pix', async (req, res) => {
+  try {
+    const { nome, valor, tempo } = req.body;
+    
+    // Garante que o cert existe antes de cada chamada
+    if (!fs.existsSync(CERT_PATH)) garanteCertificado();
+
+    const efipay = new EfiPay(efiOptions);
+
+    const body = {
+      calendario: { expiracao: 3600 },
+      devedor: { nome: nome || 'Cliente SLS WIFI' },
+      valor: { original: (valor || '5.00').toString() },
+      chave: process.env.EFI_CHAVE_PIX,
+      infoAdicionais: [{ nome: 'Plano', valor: `${tempo || 60} min` }]
+    };
+
+    const cob = await efipay.pixCreateImmediateCharge([], body);
+    const qrcode = await efipay.pixGenerateQRCode({ id: cob.loc.id });
+
+    // FILA ADD VIA STATUS
+    fila.push({
+      txid: cob.txid,
+      nome: nome || 'Cliente',
+      tempo: parseInt(tempo) || 60,
+      valor: valor || '5.00',
+      status: 'AGUARDANDO',
+      criadoEm: new Date()
     });
-    const qr = await efi.pixGenerateQRCode({id:cob.loc.id});
-    pixDB[cob.txid] = {ip, mac, valor, status:"ATIVA"};
-    salvarFila();
-    res.json({txid:cob.txid, pixCopiaECola:qr.qrcode, qrcode:qr.imagemQrcode});
-  }catch(err){
+
+    console.log('✅ QR REAL GERADO:', cob.txid);
+
+    res.json({
+      txid: cob.txid,
+      qr_code: qrcode.qrcode,
+      imagem: qrcode.imagemQrcode,
+      copia_e_cola: qrcode.qrcode,
+      loc: cob.loc
+    });
+
+  } catch (err) {
+    console.error('❌ ERRO PIX:', err.message);
     console.error(err);
-    res.status(500).json({error:err.message});
+    res.status(500).json({ 
+      erro: 'Falha ao gerar PIX real', 
+      detalhes: err.message,
+      stack: err.stack 
+    });
   }
 });
 
-app.get('/api/status/:txid', async (req,res)=>{
-  try{
-    const txid = req.params.txid;
-    const dados = pixDB[txid];
-    if(!dados) return res.json({status:"NAO_ENCONTRADO"});
-    const efi = getEfi();
-    const c = await efi.pixDetailCharge({txid});
-    if(c.status==="CONCLUIDA"){
-      dados.status="CONCLUIDA";
-      if(!filaLiberacao.find(f=>f.mac===dados.mac)){
-        filaLiberacao.push({ip:dados.ip, mac:dados.mac, txid});
-        salvarFila();
+app.get('/status/:txid', async (req, res) => {
+  try {
+    if (!fs.existsSync(CERT_PATH)) garanteCertificado();
+    const efipay = new EfiPay(efiOptions);
+    const consulta = await efipay.pixDetailCharge({ txid: req.params.txid });
+    
+    // FILA ADD VIA STATUS - quando paga libera
+    if (consulta.status === 'CONCLUIDA') {
+      const item = fila.find(f => f.txid === req.params.txid);
+      if (item) {
+        item.status = 'PAGO_LIBERAR';
+        console.log('✅ PAGO - LIBERAR WIFI:', item.txid);
       }
-      return res.json({status:"CONCLUIDA"});
     }
-    res.json({status:c.status});
-  }catch(e){ res.json({status:"ATIVA"}); }
-});
 
-app.get('/api/liberacoes', (req,res)=>{
-  try{ if(fs.existsSync('/tmp/fila.json')) filaLiberacao=JSON.parse(fs.readFileSync('/tmp/fila.json','utf8')); }catch(e){}
-  if(req.query.rsc!==undefined){
-    if(filaLiberacao.length===0) return res.type('text/plain').send('/log info "SLS fila vazia"');
-    let cmds = filaLiberacao.map(f=>`/ip hotspot user remove [find name="${f.mac}"]\n/ip hotspot user add name="${f.mac}" password="${f.mac}" profile=default`).join('\n');
-    return res.type('text/plain').send(cmds);
+    res.json(consulta);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
   }
-  res.json({fila:filaLiberacao});
 });
 
-app.get('/api/liberacoes/clear',(req,res)=>{ filaLiberacao=[]; salvarFila(); res.send('/log info "limpa"'); });
-app.get('/api/forcar/:ip/:mac',(req,res)=>{ filaLiberacao.push({ip:req.params.ip, mac:req.params.mac}); salvarFila(); res.json({ok:true}); });
+app.get('/fila', (req, res) => res.json(fila));
 
-app.listen(process.env.PORT||10000, ()=>console.log("SLS FINAL OK"));
+app.delete('/fila/:txid', (req, res) => {
+  fila = fila.filter(f => f.txid !== req.params.txid);
+  res.json({ ok: true });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log('🔥 SLS WIFI RODANDO na porta', PORT);
+  console.log('📁 Certificado:', CERT_PATH, 'Existe?', fs.existsSync(CERT_PATH));
+});
