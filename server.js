@@ -21,10 +21,10 @@ const efiOptions = {
   sandbox: false,
   client_id: process.env.EFI_CLIENT_ID,
   client_secret: process.env.EFI_CLIENT_SECRET,
-  certificado: CERT_PATH,
+  certificate: CERT_PATH,  // NOVO - em inglês
+  certificado: CERT_PATH,  // ANTIGO - mantém
   pixCert: CERT_PATH
 };
-
 let fila = [];
 let planoSelecionado = { valor: '2.00', tempo: 60, nome: '1 HORA' };
 
