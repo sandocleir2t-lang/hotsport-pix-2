@@ -48,15 +48,21 @@ async function gerar(req,res){
     const {tempo, valor, mac, ip} = req.body;
     const efi = new EfiPay(efiOptions);
     const txid = Math.random().toString(36).substring(2,34);
+    const params = { txid };
     const body = {
       calendario:{expiracao: 3600},
       devedor:{cpf:"00000000000", nome:"Cliente Hotspot"},
-      valor:{original: (valor||"3.00")},
+      valor:{original: String(valor||"3.00")},
       chave: process.env.EFI_CHAVE_PIX,
-      infoAdicionais:[{nome:"tempo", valor: (tempo||"60")}],
-      txid
+      infoAdicionais:[{nome:"tempo", valor: String(tempo||"60")}]
     };
-    const cob = await efi.pixCreateImmediateCharge([], body);
+    const cob = await efi.pixCreateImmediateCharge(params, body);
+    const qrcode = await efi.pixGenerateQRCode({id: cob.loc.id});
+    fila.push({txid, status:"AGUARDANDO", tempo: tempo||60, valor, qrcode: qrcode.qrcode, mac, ip, criadoEm: new Date()});
+    salvaFila();
+    res.json({txid, qrcode: qrcode.qrcode, imagem: qrcode.imagemQrcode});
+  }catch(e){ console.log(e); res.status(500).json({erro:e.mensagem || e.message}) }
+}    const cob = await efi.pixCreateImmediateCharge([], body);
     const qrcode = await efi.pixGenerateQRCode({id: cob.loc.id});
     
     fila.push({txid, status:"AGUARDANDO", tempo: tempo||60, qrcode: qrcode.qrcode, mac, ip, criadoEm: new Date()});
