@@ -48,7 +48,7 @@ async function gerar(req,res){
     const params = { txid };
     const body = {
       calendario:{expiracao: 3600},
-      devedor:{cpf:"00000000000", nome:"Cliente Hotspot"},
+     devedor:{nome:"Cliente Hotspot"},
       valor:{original: String(valor||"3.00")},
       chave: process.env.EFI_CHAVE_PIX,
       infoAdicionais:[{nome:"tempo", valor: String(tempo||"60")}]
