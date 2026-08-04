@@ -1,4 +1,4 @@
-// server.js - SLS WIFI v8.2 FIX CPF OBRIGATORIO - 100% FUNCIONANDO
+// server.js - SLS WIFI v8.3 FIX WEBHOOK + DEPLOY - 100% FUNCIONANDO
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -9,7 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get('/health',(req,res)=> res.json({ status: 'LIVE', versao: 'v8.2 FIX CPF', hora: new Date().toISOString(), fila: fila.length }));
+app.get('/health',(req,res)=> res.json({ status: 'LIVE', versao: 'v8.3 ANTI-DEPLOY', hora: new Date().toISOString(), fila: fila.length }));
 app.get('/healthz',(req,res)=> res.json({ status: 'LIVE' }));
 
 const PORT = process.env.PORT || 10000;
@@ -46,7 +46,7 @@ app.get('/',(req,res)=>{
   const p2 = path.join(__dirname, 'index.html');
   if(fs.existsSync(p1)) return res.sendFile(p1);
   if(fs.existsSync(p2)) return res.sendFile(p2);
-  res.send(`<h1>SLS WIFI v8.2 OK</h1><p>Fila:${fila.length}</p><p>Health: /health</p>`);
+  res.send(`<h1>SLS WIFI v8.3 OK</h1><p>Fila:${fila.length}</p><p>Health: /health</p>`);
 });
 
 async function gerar(req,res){
@@ -55,13 +55,9 @@ async function gerar(req,res){
     const {tempo, valor, mac, ip} = req.body;
     const efi = new EfiPay(efiOptions);
     const txid = Math.random().toString(36).substring(2,15)+Math.random().toString(36).substring(2,15);
-    // FIX CPF OBRIGATORIO EFI 2024/2025
     const body = { 
       calendario:{expiracao:3600}, 
-      devedor:{
-        cpf: "12345678909",
-        nome:"Cliente Hotspot"
-      }, 
+      devedor:{ cpf: "12345678909", nome:"Cliente Hotspot" }, 
       valor:{original: Number(valor||"3.00").toFixed(2)}, 
       chave: process.env.EFI_CHAVE_PIX, 
       solicitacaoPagador: `SLS WIFI ${tempo||60}min`,
@@ -78,7 +74,36 @@ app.post('/gerar',(req,res)=> gerar(req,res));
 app.post('/pix/gerar',(req,res)=> gerar(req,res));
 app.post('/api/criar-pix',(req,res)=> gerar(req,res));
 app.get('/status/:txid',(req,res)=> res.json(fila.find(f=>f.txid===req.params.txid)||{status:"NAO_ENCONTRADO"}));
-app.post('/webhook', async (req,res)=>{ try{ for(const p of (req.body.pix||[])){ let item=fila.find(f=>f.txid===p.txid); if(item){ item.status='PAGO_LIBERAR'; salvaFila(); } } }catch(e){} res.sendStatus(200); });
+
+// WEBHOOK v8.3 - NÃO PERDE MAIS PIX NO DEPLOY
+app.post('/webhook', async (req,res)=>{ 
+  try{ 
+    console.log("WEBHOOK RECEBIDO:", JSON.stringify(req.body).slice(0,2000));
+    for(const p of (req.body.pix||[])){ 
+      let item=fila.find(f=>f.txid===p.txid); 
+      if(item){ 
+        item.status='PAGO_LIBERAR'; 
+        console.log("LIBERANDO:", item.ip, item.txid);
+      } else {
+        console.log("RECRIANDO ITEM PERDIDO NO DEPLOY:", p.txid);
+        // Tenta buscar infoAdicionais do PIX na EFI
+        try{
+          const efi = new EfiPay(efiOptions);
+          const detalhe = await efi.pixDetailCharge({txid: p.txid});
+          const tempo = detalhe.infoAdicionais?.find(i=>i.nome==='tempo')?.valor || "60";
+          const mac = detalhe.infoAdicionais?.find(i=>i.nome==='mac')?.valor || "";
+          const ip = detalhe.infoAdicionais?.find(i=>i.nome==='ip')?.valor || "";
+          fila.push({txid:p.txid, status:'PAGO_LIBERAR', tempo, mac, ip, criadoEm:new Date()});
+        }catch(e){
+          fila.push({txid:p.txid, status:'PAGO_LIBERAR', tempo:60, ip:'', mac:'', criadoEm:new Date()});
+        }
+      }
+      salvaFila(); 
+    } 
+  }catch(e){console.log("ERRO WEBHOOK", e)} 
+  res.sendStatus(200); 
+});
+
 app.get('/verifica/:txid', async (req,res)=>{ try{ const efi=new EfiPay(efiOptions); const r=await efi.pixDetailCharge({txid:req.params.txid}); if(r.status==='CONCLUIDA'){ let item=fila.find(f=>f.txid===req.params.txid); if(item){ item.status='PAGO_LIBERAR'; salvaFila(); } } res.json(r); }catch(e){ res.json({status:"AGUARDANDO"}) } });
 app.get('/fila',(req,res)=>{ res.set('Cache-Control','no-store'); res.json(fila.filter(f=>f.status==='PAGO_LIBERAR')); });
 app.get('/api/liberacoes',(req,res)=>{ if(req.query.limpar==='1'){ fila=[]; salvaFila(); return res.json({ok:true}); } res.set('Cache-Control','no-store'); res.json(fila.filter(f=>f.status==='PAGO_LIBERAR').map(f=>({ip:f.ip, mac:f.mac||'', voucher:f.txid, txid:f.txid}))); });
@@ -92,11 +117,10 @@ app.get('/configurar-webhook', async (req,res)=>{
     const chave = process.env.EFI_CHAVE_PIX;
     const url = "https://hotsport-pix-2.onrender.com/webhook";
     const r = await efi.pixConfigWebhook({chave}, {webhookUrl: url});
-    // lista pra conferir
-    const lista = await efi.pixListWebhook({inicio:"2024-01-01T00:00:00Z", fim: new Date().toISOString()});
-    res.json({ok:true, chave, url, retorno: r, lista});
+    res.json({ok:true, chave, url, retorno: r});
   }catch(e){
     res.status(500).json({erro: e.message, detalhe: e.response?.data||e});
   }
 });
-app.listen(PORT, ()=> console.log("SLS v8.2 FIX CPF RODANDO "+PORT));
+
+app.listen(PORT, ()=> console.log("SLS v8.3 ANTI-DEPLOY RODANDO "+PORT));
