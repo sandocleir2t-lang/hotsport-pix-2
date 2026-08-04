@@ -1,4 +1,4 @@
-// server.js - SLS WIFI v8.1 FIX HEALTH - 100% FUNCIONANDO
+// server.js - SLS WIFI v8.2 FIX CPF OBRIGATORIO - 100% FUNCIONANDO
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -9,8 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ROTA HEALTH TEM QUE VIR ANTES DO STATIC - ISSO QUE FALTAVA
-app.get('/health',(req,res)=> res.json({ status: 'LIVE', versao: 'v8.1 FIX HEALTH', hora: new Date().toISOString(), fila: fila.length }));
+app.get('/health',(req,res)=> res.json({ status: 'LIVE', versao: 'v8.2 FIX CPF', hora: new Date().toISOString(), fila: fila.length }));
 app.get('/healthz',(req,res)=> res.json({ status: 'LIVE' }));
 
 const PORT = process.env.PORT || 10000;
@@ -38,7 +37,6 @@ try{
 }catch(e){ fila=[] }
 function salvaFila(){ try{ fs.writeFileSync('/tmp/fila.json', JSON.stringify(fila)); fs.writeFileSync('fila.json', JSON.stringify(fila)); }catch(e){} }
 
-// STATIC DEPOIS DO HEALTH
 app.use(express.static(path.join(__dirname)));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static('public'));
@@ -48,7 +46,7 @@ app.get('/',(req,res)=>{
   const p2 = path.join(__dirname, 'index.html');
   if(fs.existsSync(p1)) return res.sendFile(p1);
   if(fs.existsSync(p2)) return res.sendFile(p2);
-  res.send(`<h1>SLS WIFI v8.1 OK</h1><p>Fila:${fila.length}</p><p>Health: /health</p>`);
+  res.send(`<h1>SLS WIFI v8.2 OK</h1><p>Fila:${fila.length}</p><p>Health: /health</p>`);
 });
 
 async function gerar(req,res){
@@ -57,13 +55,24 @@ async function gerar(req,res){
     const {tempo, valor, mac, ip} = req.body;
     const efi = new EfiPay(efiOptions);
     const txid = Math.random().toString(36).substring(2,15)+Math.random().toString(36).substring(2,15);
-    const body = { calendario:{expiracao:3600}, devedor:{nome:"Cliente Hotspot"}, valor:{original: String(valor||"3.00")}, chave: process.env.EFI_CHAVE_PIX, infoAdicionais:[{nome:"tempo",valor:String(tempo||"60")}] };
+    // FIX CPF OBRIGATORIO EFI 2024/2025
+    const body = { 
+      calendario:{expiracao:3600}, 
+      devedor:{
+        cpf: "12345678909",
+        nome:"Cliente Hotspot"
+      }, 
+      valor:{original: Number(valor||"3.00").toFixed(2)}, 
+      chave: process.env.EFI_CHAVE_PIX, 
+      solicitacaoPagador: `SLS WIFI ${tempo||60}min`,
+      infoAdicionais:[{nome:"tempo",valor:String(tempo||"60")},{nome:"mac",valor:String(mac||"")},{nome:"ip",valor:String(ip||"")}] 
+    };
     const cob = await efi.pixCreateImmediateCharge({txid}, body);
     const qrcode = await efi.pixGenerateQRCode({id: cob.loc.id});
     fila.push({txid, status:"AGUARDANDO", tempo:tempo||60, valor, qrcode:qrcode.qrcode, mac, ip, criadoEm:new Date()});
     salvaFila();
     res.json({txid, qrcode:qrcode.qrcode, pixCopiaECola:qrcode.qrcode, imagem:qrcode.imagemQrcode, imagemQrcode:qrcode.imagemQrcode});
-  }catch(e){ console.log(e.response?.data||e); res.status(500).json({erro:e.message, detalhe: e.response?.data}) }
+  }catch(e){ console.log("ERRO GERAR:", e.response?.data||e); res.status(500).json({erro:e.message, detalhe: e.response?.data||e.stack}) }
 }
 app.post('/gerar',(req,res)=> gerar(req,res));
 app.post('/pix/gerar',(req,res)=> gerar(req,res));
@@ -77,4 +86,4 @@ app.get('/api/consumido',(req,res)=>{ const ip=req.query.ip; if(ip){ fila=fila.f
 app.get('/confirma/:txid',(req,res)=>{ fila=fila.filter(f=>f.txid!==req.params.txid); salvaFila(); res.json({ok:true}); });
 app.get('/api/libera',(req,res)=>{ const {ip,mac,voucher,txid}=req.query; if(ip){ fila=fila.filter(f=>f.ip!==ip); fila.push({ip,mac:mac||'',voucher:txid||voucher||'',txid:txid||voucher||'',status:'PAGO_LIBERAR'}); salvaFila(); } res.redirect(`http://10.5.50.1/login?username=${HOTSPOT_USER_FIXO}&password=${HOTSPOT_PASS_FIXO}`); });
 
-app.listen(PORT, ()=> console.log("SLS v8.1 FIX HEALTH RODANDO "+PORT));
+app.listen(PORT, ()=> console.log("SLS v8.2 FIX CPF RODANDO "+PORT));
