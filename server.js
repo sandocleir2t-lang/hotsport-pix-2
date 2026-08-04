@@ -85,5 +85,18 @@ app.get('/api/liberacoes',(req,res)=>{ if(req.query.limpar==='1'){ fila=[]; salv
 app.get('/api/consumido',(req,res)=>{ const ip=req.query.ip; if(ip){ fila=fila.filter(f=>f.ip!==ip); salvaFila(); } res.json({ok:true}); });
 app.get('/confirma/:txid',(req,res)=>{ fila=fila.filter(f=>f.txid!==req.params.txid); salvaFila(); res.json({ok:true}); });
 app.get('/api/libera',(req,res)=>{ const {ip,mac,voucher,txid}=req.query; if(ip){ fila=fila.filter(f=>f.ip!==ip); fila.push({ip,mac:mac||'',voucher:txid||voucher||'',txid:txid||voucher||'',status:'PAGO_LIBERAR'}); salvaFila(); } res.redirect(`http://10.5.50.1/login?username=${HOTSPOT_USER_FIXO}&password=${HOTSPOT_PASS_FIXO}`); });
-
+app.get('/configurar-webhook', async (req,res)=>{
+  try{
+    garanteCertificado();
+    const efi = new EfiPay(efiOptions);
+    const chave = process.env.EFI_CHAVE_PIX;
+    const url = "https://hotsport-pix-2.onrender.com/webhook";
+    const r = await efi.pixConfigWebhook({chave}, {webhookUrl: url});
+    // lista pra conferir
+    const lista = await efi.pixListWebhook({inicio:"2024-01-01T00:00:00Z", fim: new Date().toISOString()});
+    res.json({ok:true, chave, url, retorno: r, lista});
+  }catch(e){
+    res.status(500).json({erro: e.message, detalhe: e.response?.data||e});
+  }
+});
 app.listen(PORT, ()=> console.log("SLS v8.2 FIX CPF RODANDO "+PORT));
