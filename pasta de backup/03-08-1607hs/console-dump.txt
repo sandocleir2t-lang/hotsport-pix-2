@@ -1,0 +1,8 @@
+# 2026-07-31 19:15:09 by RouterOS 7.23.2
+# software id = XKIG-Y0RP
+#
+  status: requesting
+# 2026-08-01 10:47:40 by RouterOS 7.23.2
+# software id = XKIG-Y0RP
+#
+  status: connecting

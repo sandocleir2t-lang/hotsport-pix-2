@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SLS GERADOR FINAL - OFFLINE</title>
+<style>body{font-family:Arial;background:#111;color:#fff;padding:20px} .box{background:#222;padding:20px;border-radius:12px;max-width:500px;margin:auto} button{width:100%;padding:18px;font-size:20px;font-weight:bold;border:0;border-radius:10px;margin-top:12px} .g{background:#0f0;color:#000} .c{background:#ff0;color:#000} textarea{width:100%;height:220px;background:#000;color:#0f0;font-family:monospace;font-size:13px;margin-top:12px;padding:10px;box-sizing:border-box} .v{font-size:40px;text-align:center;margin:10px 0} .ok{background:#004d00;padding:10px;border-radius:8px;margin-top:10px;display:none}</style>
+</head><body>
+<div class="box">
+<h2 style="text-align:center">🎫 SLS WIFI - GERADOR FINAL</h2>
+<p>Perfil: <select id="prof" style="padding:8px;width:100%"><option value="3horas" selected>3horas (3h)</option><option value="default">default</option></select></p>
+<p>Quantidade: <select id="qtd" style="padding:8px;width:100%"><option>5</option><option selected>10</option><option>20</option><option>50</option></select></p>
+<button class="g" onclick="gerar()">GERAR VOUCHERS</button>
+<div id="lista"></div>
+<button class="c" id="btnCopy" onclick="copiar()" style="display:none">📋 COPIAR COMANDOS PARA COLAR NO TERMINAL</button>
+<textarea id="cmd" readonly placeholder="Os comandos vão aparecer aqui..."></textarea>
+<div id="ok" class="ok">✅ Copiado! Agora cola no WinBox > New Terminal</div>
+</div>
+<script>
+let comandos=""
+function gerar(){
+ let q=parseInt(document.getElementById('qtd').value);
+ let prof=document.getElementById('prof').value;
+ let html='<div class=v>'+q+' vouchers</div><table style="width:100%;border-collapse:collapse"><tr><th>Usuario</th><th>Senha</th></tr>';
+ comandos="";
+ for(let i=0;i<q;i++){
+   let rnd=Math.random().toString(36).substring(2,6).toUpperCase();
+   let num=Math.floor(1000+Math.random()*9000);
+   let user="SLS-"+rnd;
+   let pass=""+num;
+   let up= (prof==="3horas"?"3h":"")+""; // limit-uptime
+   // COMANDO CORRETO PARA MIKROTIK - SEMPRE ESSE FORMATO
+   comandos+=`/ip hotspot user add name=${user} password=${pass} profile=${prof} limit-uptime=${prof==="3horas"?"3h":""} server=all\n`;
+   html+=`<tr><td>${user}</td><td>${pass}</td></tr>`;
+ }
+ html+='</table>';
+ document.getElementById('lista').innerHTML=html;
+ document.getElementById('cmd').value=comandos;
+ document.getElementById('btnCopy').style.display='block';
+ document.getElementById('ok').style.display='none';
+}
+function copiar(){
+ let t=document.getElementById('cmd');
+ t.select(); document.execCommand('copy');
+ if(navigator.clipboard) navigator.clipboard.writeText(comandos);
+ document.getElementById('ok').style.display='block';
+ alert('COPIADO! Agora vai no WinBox > New Terminal > Cola (CTRL+V) e da ENTER');
+}
+</script>
+</body></html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SLS WIFI</title>
+<style>
+body{background:#3a2290;color:#fff;font-family:Arial;text-align:center;padding:15px}
+button{width:100%;padding:18px;margin:8px 0;border-radius:18px;border:0;font-weight:bold;font-size:18px}
+.amarelo{background:#ffe08a}.amareloForte{background:#ffcc00}
+.box{background:#fff;color:#000;border-radius:20px;padding:15px;margin-top:15px}
+.verde{background:#5ee6a5;padding:18px;border-radius:20px;margin-top:10px}
+</style>
+</head>
+<body>
+<div>CONECTE - SE AQUI!!!</div>
+<h1 style="margin:0">SLS WIFI 🚀</h1>
+<small>INTERNET RAPIDA AQUI</small>
+
+<button class="amarelo" onclick="gerar('2.00','1 HORA')">1 HORA R$ 2,00</button>
+<button class="amarelo" onclick="gerar('5.00','2 HORAS')">2 HORAS R$ 5,00</button>
+<button class="amarelo" onclick="gerar('12.00','EVENTO')">EVENTO TODO R$ 12,00</button>
+<button class="amareloForte" onclick="gerar('2.00','AVULSO')">GERAR PIX - PAGAR AGORA</button>
+
+<div class="box" id="pixBox" style="display:none">
+<div style="background:#ffcc00;display:inline-block;padding:8px 18px;border-radius:20px;font-weight:bold">PIX GERADO!</div>
+<div id="pixInfo" style="margin:10px 0">Gerando...</div>
+<img id="qrcodeImg" style="width:240px;display:none;margin:auto">
+<pre id="copiaCola" style="background:#f5f5f5;padding:10px;white-space:break-spaces;word-break:break-all;font-size:12px"></pre>
+<button class="amareloForte" onclick="copiar()">copia e cole</button>
+<div id="status">Aguardando pagamento...</div>
+</div>
+
+<button class="verde" onclick="verificar()">✅ JA PAGUEI - LIBERAR WIFI</button>
+
+<script>
+const API = "https://hotsport-pix-2.onrender.com";
+let txidGlobal = null;
+let ip = "", mac = "";
+
+function getParam(name){
+  try{
+    let url = new URL(window.location.href);
+    return url.searchParams.get(name) || "";
+  }catch(e){ return "" }
+}
+
+async function gerar(valor, nome){
+  document.getElementById('pixBox').style.display='block';
+  document.getElementById('pixInfo').innerText = nome + " R$ " + valor + " - Gerando...";
+  // pega ip/mac da URL do hotspot (?ip= & mac=)
+  ip = getParam('ip') || getParam('mac-esc') || "";
+  mac = getParam('mac') || getParam('mac-esc') || "";
+  // fallback se abrir direto
+  if(!ip) ip = "10.5.50." + Math.floor(Math.random()*200+1);
+  if(!mac) mac = "58:04:4F:" + Math.random().toString(16).slice(2,8).toUpperCase();
+  
+  try{
+    let res = await fetch(API + "/api/gerar-pix", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({valor: valor, ip: ip, mac: mac})
+    });
+    let data = await res.json();
+    if(data.error) throw new Error(data.error);
+    txidGlobal = data.txid;
+    document.getElementById('copiaCola').innerText = data.pixCopiaECola;
+    if(data.qrcode){
+      let img = document.getElementById('qrcodeImg');
+      img.src = data.qrcode;
+      img.style.display='block';
+    }
+    document.getElementById('pixInfo').innerText = "PIX de " + nome;
+    checarStatus();
+  }catch(err){
+    document.getElementById('copiaCola').innerText = "Erro de conexao: " + err.message;
+    console.error(err);
+  }
+}
+
+function copiar(){
+  let t = document.getElementById('copiaCola').innerText;
+  navigator.clipboard.writeText(t);
+  alert("PIX copiado!");
+}
+
+async function checarStatus(){
+  if(!txidGlobal) return;
+  try{
+    let res = await fetch(API + "/api/status/" + txidGlobal);
+    let data = await res.json();
+    if(data.status === "CONCLUIDA"){
+      document.getElementById('status').innerHTML = "<b style='color:green'>PAGO! Liberando em 15s...</b>";
+      setTimeout(verificar, 3000);
+      return;
+    }
+  }catch(e){}
+  setTimeout(checarStatus, 3000);
+}
+
+async function verificar(){
+  if(!txidGlobal) { alert("Gere o PIX primeiro"); return; }
+  document.getElementById('status').innerText = "Verificando...";
+  try{
+    let res = await fetch(API + "/api/status/" + txidGlobal);
+    let data = await res.json();
+    if(data.status === "CONCLUIDA" || data.status === "pago"){
+      document.getElementById('status').innerHTML = "LIBERADO! Aguarde 15s e navegue!";
+    }else{
+      alert("Ainda não pago. Status: " + data.status);
+    }
+  }catch(e){ alert("Erro ao verificar: "+e.message); }
+}
+</script>
+</body>
+</html>

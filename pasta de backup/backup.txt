@@ -1,0 +1,2 @@
+/import file=bancos-wifi-liberados.rsc
+/import file=bancos-ip-liberados.rsc

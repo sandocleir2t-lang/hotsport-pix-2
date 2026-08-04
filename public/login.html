@@ -1,0 +1,26 @@
+<script>
+let plano={valor:'3.00',tempo:60};
+function sel(el,v,t){document.querySelectorAll('.plano').forEach(n=>n.classList.remove('ativo'));el.classList.add('ativo');plano={valor:v,tempo:t};}
+async function gerar(){
+  let btn=document.querySelector('.btn-gerar');
+  btn.innerText='GERANDO...';
+  try{
+    let res=await fetch('https://hotsport-pix-2.onrender.com/gerar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({valor: plano.valor, tempo: plano.tempo, mac: '$(mac)', ip: '$(ip)'})
+    });
+    let data=await res.json();
+    if(data.qrcode){
+      document.getElementById('pixArea').innerHTML=`<div style="background:#fff;padding:10px;border-radius:10px;margin-top:10px"><img src="${data.imagem}" style="width:100%"><br><small style="color:#000;word-break:break-all">${data.qrcode}</small><br><br><button onclick="verificar('${data.txid}')" style="width:100%;padding:10px;background:green;color:#fff;border:0;border-radius:5px">JÁ PAGUEI - VERIFICAR</button></div>`;
+      window.txidAtual=data.txid;
+    }else{ alert('Erro ao gerar PIX: '+JSON.stringify(data)); btn.innerText='GERAR PIX - PAGAR AGORA'; }
+  }catch(e){ alert('Erro ao gerar PIX. Verifique a internet. Erro: '+e.message); btn.innerText='GERAR PIX - PAGAR AGORA'; }
+}
+async function verificar(txid){
+  let r=await fetch('https://hotsport-pix-2.onrender.com/verifica/'+txid);
+  let j=await r.json();
+  if(j.status==='CONCLUIDA'){ document.getElementById('vUser').value=txid; document.getElementById('vPass').value='123'; document.forms.login.submit(); }
+  else alert('Ainda não pagou: '+j.status);
+}
+</script>

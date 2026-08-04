@@ -1,0 +1,20 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>SLS Impressao</title>
+<style>body{font-family:Arial;margin:0;padding:10px;background:#fff;color:#000} h1{text-align:center;margin:5px} .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px} .card{border:2px dashed #000;padding:10px;border-radius:8px;text-align:center} .y{background:#ffcc00;font-weight:bold;padding:4px} .u{font-size:18px;font-weight:bold} .p{font-size:22px;font-weight:bold;color:#d00} @media print{button{display:none}} button{width:100%;padding:12px;margin:5px 0;font-size:16px}</style>
+</head><body>
+<button onclick="gerar()">GERAR 10 NOVOS VOUCHERS</button>
+<button onclick="window.print()">IMPRIMIR</button>
+<h1>SLS WIFI - VOUCHER 3 HORAS</h1>
+<div class="grid" id="grid"></div>
+<script>
+function gen(){return Math.random().toString(36).substr(2,4).toUpperCase()}
+function genN(){return Math.floor(1000+Math.random()*9000)}
+function gerar(){
+ let g=document.getElementById('grid'); g.innerHTML='';
+ for(let i=0;i<10;i++){
+  let u='SLS-'+gen(); let p=genN();
+  g.innerHTML+=`<div class="card"><div class="y">SLS WIFI 🚀</div><div class="u">${u}</div><div>SENHA</div><div class="p">${p}</div><small>3 Horas - Conecte na SLS WIFI</small></div>`;
+ }
+}
+gerar();
+</script>
+</body></html>

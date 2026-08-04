@@ -1,0 +1,16 @@
+Resumo por estado
+Piauí	Maranhão
+
+Banco do Brasil - ok
+Caixa Econômica - ok
+Banco do Nordeste
+Bradesco - ok
+Itaú
+Sicoob/Sicredi (crescendo)
+NUBANK - OK
+EFI - OK
+
+
+
+Lista final fechada:
+CAIXA, BRADESCO, NUBANK, EFI, BNB, ITAU, SICOOB, SICREDI, SANTANDER, INTER, C6, PICPAY, MERCADO PAGO - tudo OK!
