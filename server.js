@@ -6,7 +6,7 @@ const EfiPay = require('sdk-node-apis-efi');
 const app = express();
 app.use(cors());
 app.use(express.json());
-
+app.use(express.static('public'));
 const CERT_PATH = '/tmp/hotspot-producao.p12';
 function garanteCertificado(){
   try{
