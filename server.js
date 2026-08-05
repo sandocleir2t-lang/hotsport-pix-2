@@ -1,4 +1,4 @@
-// server.js v9.2 SLS WIFI - FIX 404 + POLLING FREE - SEU 116 LINHAS CONSERTADO
+// server.js v9.3 SLS WIFI - FIX CERTIFICADO NOME + POLLING FREE
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -13,13 +13,26 @@ const PLANOS = {
   "EVENTO": { valor: 12.00, tempo: 720, vel: "10M/10M", nome: "EVENTO 12H" }
 };
 
-let certPath = './certs/certificado.p12';
+// --- FIX CERTIFICADO - PROCURA EM VARIOS LUGARES ---
+let certPath = '';
 try {
   if (process.env.EFI_CERT_P12) {
     const buffer = Buffer.from(process.env.EFI_CERT_P12, 'base64');
     fs.writeFileSync('/tmp/cert.p12', buffer);
     certPath = '/tmp/cert.p12';
-    console.log('Certificado criado em /tmp/cert.p12');
+    console.log('Certificado criado em /tmp/cert.p12 da ENV');
+  } else if (fs.existsSync('./certs/hotspot-producao.p12')) {
+    certPath = './certs/hotspot-producao.p12';
+    console.log('Usando certificado:./certs/hotspot-producao.p12');
+  } else if (fs.existsSync('./certs/certificado.p12')) {
+    certPath = './certs/certificado.p12';
+    console.log('Usando certificado:./certs/certificado.p12');
+  } else if (fs.existsSync('./hotspot-producao.p12')) {
+    certPath = './hotspot-producao.p12';
+    console.log('Usando certificado:./hotspot-producao.p12');
+  } else {
+    certPath = './certs/certificado.p12';
+    console.log('ATENCAO: Nenhum cert encontrado, tentando fallback: '+certPath);
   }
 } catch(e){ console.log('Erro cert', e.message); }
 
@@ -73,7 +86,7 @@ app.get('/', async (req, res) => {
          </script></body></html>`);
      }catch(e){ return res.send('Erro gerar PIX: '+e.message); }
   }
-  res.send('SLS v9.2 FIX FREE OK - Use com?plano=1H&mac=XX&ip=XX');
+  res.send('SLS v9.3 FIX CERT OK - Use com?plano=1H&mac=XX&ip=XX');
 });
 
 app.post('/webhook', async (req, res) => {
@@ -84,7 +97,6 @@ app.post('/webhook', async (req, res) => {
     if(idx>=0){ fila[idx].status='CONCLUIDA'; fila[idx].expiraEm=getExp(fila[idx].tempoMin); salvar(); console.log('Liberado local', p.txid); }
     else {
       try{
-        console.log('Fila vazia, recuperando da EFI:', p.txid);
         const detalhe = await efipay.pixDetailCharge({ txid: p.txid });
         const info = {}; (detalhe.infoAdicionais||[]).forEach(i=> info[i.nome]=i.valor);
         if(info.plano){ fila.push({ txid: p.txid, plano: info.plano, mac: info.mac, ip: info.ip, tempoMin: parseInt(info.tempo), velocidade: info.velocidade, status:'CONCLUIDA', expiraEm: getExp(parseInt(info.tempo)), criadoEm: Date.now(), recuperado: true }); salvar(); console.log('RECUPERADO!'); }
@@ -94,7 +106,6 @@ app.post('/webhook', async (req, res) => {
   res.json({ok:true});
 });
 
-// --- FIX 1: AGORA APAGA DA FILA DE VERDADE ---
 app.get('/api/liberacoes', (req,res)=>{ const ativos = fila.filter(f=> f.status==='CONCLUIDA' && f.expiraEm > Date.now()); res.json(ativos); });
 app.get('/api/consumido/:ip', (req,res)=>{
   console.log('CONSUMIDO: '+req.params.ip);
@@ -111,7 +122,6 @@ app.get('/api/liberacoes-txt', (req,res)=>{
   res.type('text/plain').send(txt);
 });
 
-// --- FIX 2: POLLING QUE SALVA O FREE ---
 setInterval(async ()=>{
   const pendentes = fila.filter(f=>f.status==='ATIVA');
   if(pendentes.length===0) return;
@@ -127,4 +137,4 @@ setInterval(async ()=>{
   }
 }, 30000);
 
-app.listen(process.env.PORT || 3000, ()=> console.log('SLS v9.2 FIX FREE RODANDO COM SUAS ENVS - POLLING ATIVO'));
+app.listen(process.env.PORT || 3000, ()=> console.log('SLS v9.3 FIX CERT RODANDO - PATH: '+certPath));
