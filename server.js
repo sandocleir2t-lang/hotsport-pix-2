@@ -1,4 +1,4 @@
-// v9.7 SLS WIFI - UMA TELA SO - IGUAL PRINT EXEMPLO
+// v9.8 SLS WIFI - PREMIUM ROXO + TELA UNICA - HIBRIDO PERFEITO
 const express = require('express');
 const fs = require('fs');
 const EfiPay = require('sdk-node-apis-efi');
@@ -6,9 +6,9 @@ const app = express();
 app.use(express.json()); app.use(express.urlencoded({extended:true}));
 
 const PLANOS = {
-  "1H": { valor: 3.00, tempo: 60, vel: "5 MEGA", nome: "1 HORA - 5 MEGA", desc: "Internet rapida" },
-  "2H": { valor: 5.00, tempo: 120, vel: "10 MEGA", nome: "2 HORAS - 10 MEGA", desc: "Mais velocidade" },
-  "EVENTO": { valor: 12.00, tempo: 1440, vel: "15 MEGA", nome: "EVENTO TODO - 15 MEGA", desc: "Ultra rapida o dia todo" }
+  "1H": { valor: 3.00, tempo: 60, vel: "5 MEGA", nome: "1 HORA - 5 MEGA", desc: "Ideal para uso rapido", sub: "1h de acesso" },
+  "3H": { valor: 5.00, tempo: 180, vel: "10 MEGA", nome: "3 HORAS - 10 MEGA", desc: "Mais vendido", sub: "3h de acesso", tag: "MAIS VENDIDO" },
+  "24H": { valor: 12.00, tempo: 1440, vel: "15 MEGA", nome: "EVENTO TODO - 15 MEGA", desc: "Ultra rapida o dia todo", sub: "24h de acesso" }
 };
 
 let certPath = './certs/hotspot-producao.p12';
@@ -27,37 +27,55 @@ app.get('/', (req,res)=>{
   const ip = req.query.ip || '';
   res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-*{box-sizing:border-box}body{background:#0f2040;margin:0;padding:14px;font-family:Arial,Helvetica,sans-serif;color:#fff}
-.header{text-align:center;margin-bottom:14px}.header h1{margin:0;font-size:32px;letter-spacing:1px}.header p{margin:2px 0 0 0;color:#8da0c0;font-size:14px;letter-spacing:2px}
-.alerta{background:#ffeb3b;color:#000;text-align:center;padding:10px;border-radius:12px;font-weight:800;font-size:14px;margin-bottom:14px}
-.plano{background:#19305e;border:1.5px solid #2a4a80;border-radius:14px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
-.plano.ativo{background:#ffeb3b;border-color:#ffeb3b;color:#000}
-.plano.ativo .desc{color:#333}
-.nome{font-weight:800;font-size:17px}.desc{font-size:12px;color:#8da0c0;margin-top:2px}.preco{font-weight:800;font-size:18px}
-.btn-amarelo{width:100%;background:#ffeb3b;color:#000;border:none;padding:16px;border-radius:12px;font-weight:900;font-size:17px;margin-top:12px;cursor:pointer}
-.qrbox{display:none;background:#fff;border-radius:14px;padding:14px;margin-top:14px;text-align:center;color:#000}.qrbox img{width:260px;max-width:100%}
-.input{width:100%;background:#0f1c36;border:1.5px solid #2a4a80;color:#fff;padding:14px;border-radius:12px;margin-top:10px}
-.btn-voucher{width:100%;background:#203a6b;color:#fff;border:none;padding:14px;border-radius:12px;font-weight:800;margin-top:10px;cursor:pointer}
-.small{color:#6b7fa3;font-size:11px;text-align:center;margin-top:12px}
+*{box-sizing:border-box}body{background:#0a0a12;color:#fff;font-family:Inter,Arial;margin:0;padding:12px}
+.top{background:#15151f;border-radius:20px;padding:12px;text-align:center;border:1px solid #222;margin-bottom:12px}
+.online{color:#8b8fa3;font-size:11px;letter-spacing:1px}.dot{display:inline-block;width:8px;height:8px;background:#22c55e;border-radius:50%;margin-right:6px;box-shadow:0 0 8px #22c55e}
+.logo{display:flex;align-items:center;justify-content:center;gap:10px;margin:8px 0}
+.ic{width:38px;height:38px;background:#7c3aed;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.sls{font-size:28px;font-weight:800}.wifi{font-weight:300;color:#a78bfa}.sub{color:#8b8fa3;font-size:12px}
+.card{background:#15151f;border-radius:20px;padding:14px;border:1px solid #222}
+.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.badge{background:#2a2250;color:#a78bfa;font-size:10px;padding:6px 10px;border-radius:20px;border:1px solid #3b2f6e}
+.alerta{background:#ffeb3b;color:#000;text-align:center;padding:10px;border-radius:12px;font-weight:800;font-size:13px;margin-bottom:12px}
+.plano{border:1.5px solid #2a2a3a;border-radius:16px;padding:14px;margin-bottom:10px;position:relative;cursor:pointer;background:#1a1a27}
+.plano.ativo{border-color:#ffeb3b;box-shadow:0 0 15px rgba(255,235,59,.3);background:#1e1e2d}
+.tag{position:absolute;top:-9px;right:15px;background:#7c3aed;font-size:10px;padding:3px 8px;border-radius:10px;font-weight:700;color:#fff}
+.row{display:flex;justify-content:space-between;align-items:center}
+.left{display:flex;gap:10px;align-items:center}
+.ico{width:32px;height:32px;background:#1e1e2d;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.price{font-size:20px;font-weight:800}.small{font-size:11px;color:#8b8fa3}
+.btn{width:100%;background:#ffeb3b;color:#000;border:none;padding:16px;border-radius:14px;font-size:16px;font-weight:900;margin-top:12px;cursor:pointer}
+.qrbox{display:none;background:#fff;border-radius:16px;padding:14px;margin-top:14px;text-align:center;color:#000}
+.input{width:100%;background:#0f0f1a;border:1px solid #2a2a3a;color:#fff;padding:13px;border-radius:12px;margin-top:10px;box-sizing:border-box}
+.btn-voucher{width:100%;background:#2a2250;border:1px solid #3b2f6e;color:#a78bfa;padding:13px;border-radius:12px;font-weight:800;margin-top:10px;cursor:pointer}
+.sep{text-align:center;color:#8b8fa3;font-size:12px;margin-top:16px}
 </style></head><body>
 
-<div class="header"><h1>SLS WIFI</h1><p>INTERNET RAPIDA AQUI</p></div>
+<div class="top"><div class="online"><span class="dot"></span>ONLINE • 247 CLIENTES CONECTADOS</div>
+<div class="logo"><div class="ic">📶</div><div class="sls">SLS<span class="wifi">WIFI</span></div></div>
+<div class="sub">Internet rápida • Pagamento instantâneo via PIX</div></div>
 
 <div class="alerta">NAO FECHE ESTA TELA ATE PAGAR!</div>
 
-<div id="p1" class="plano ativo" onclick="sel('1H')"><div><div class="nome">1 HORA - 5 MEGA</div><div class="desc">Internet rapida</div></div><div class="preco">R$ 3,00</div></div>
-<div id="p2" class="plano" onclick="sel('2H')"><div><div class="nome">2 HORAS - 10 MEGA</div><div class="desc">Mais velocidade</div></div><div class="preco">R$ 5,00</div></div>
-<div id="p3" class="plano" onclick="sel('EVENTO')"><div><div class="nome">EVENTO TODO - 15 MEGA</div><div class="desc">Ultra rapida o dia todo</div></div><div class="preco">R$ 12,00</div></div>
+<div class="card">
+<div class="head"><b>ESCOLHA SEU PLANO</b><span class="badge">⚡ Ativação imediata</span></div>
 
-<button class="btn-amarelo" id="btnGerar" onclick="gerarPix()">GERAR PIX - PAGAR AGORA</button>
+<div id="p1" class="plano ativo" onclick="sel('1H')"><div class="tag" style="background:#ffeb3b;color:#000">1H</div><div class="row"><div class="left"><div class="ico">🕐</div><div><div><b>1 HORA - 5 MEGA</b></div><div class="small">Ideal para uso rápido</div></div></div><div style="text-align:right"><div class="price">R$ 3</div><div class="small">1h de acesso</div></div></div></div>
+
+<div id="p2" class="plano" onclick="sel('3H')"><div class="tag">MAIS VENDIDO</div><div class="row"><div class="left"><div class="ico">🕒</div><div><div><b>3 HORAS - 10 MEGA</b></div><div class="small">Mais vendido</div></div></div><div style="text-align:right"><div class="price">R$ 5</div><div class="small">3h de acesso</div></div></div></div>
+
+<div id="p3" class="plano" onclick="sel('24H')"><div class="row"><div class="left"><div class="ico">📅</div><div><div><b>EVENTO TODO - 15 MEGA</b></div><div class="small">Ultra rápida o dia todo</div></div></div><div style="text-align:right"><div class="price">R$ 12</div><div class="small">24h de acesso</div></div></div></div>
+
+<button class="btn" id="btnGerar" onclick="gerarPix()">GERAR PIX - PAGAR AGORA</button>
 
 <div id="qrBox" class="qrbox">
-<div style="font-weight:800;margin-bottom:8px">ESCANEIE O PIX - <span id="planoNomeQr"></span></div>
-<img id="qrImg" src=""><div id="qrCodeTxt" style="font-size:10px;word-break:break-all;margin-top:8px"></div>
-<div id="statusPix" style="margin-top:10px;font-weight:800;color:#0a0">Aguardando pagamento...</div>
+<div style="font-weight:800;margin-bottom:8px">PIX GERADO - <span id="planoNomeQr"></span></div>
+<img id="qrImg" src="" style="width:260px;max-width:100%">
+<div id="qrCodeTxt" style="font-size:9px;word-break:break-all;margin-top:8px;color:#000"></div>
+<div id="statusPix" style="margin-top:10px;font-weight:800;color:#16a34a">Aguardando pagamento...</div>
 </div>
 
-<div style="margin-top:20px;text-align:center;font-size:14px">TEM VOUCHER?</div>
+<div class="sep">TEM VOUCHER?</div>
 <form action="http://10.5.50.1/login" method="post">
 <input type="hidden" name="dst" value="https://www.google.com">
 <input class="input" name="username" placeholder="CODIGO VOUCHER">
@@ -65,11 +83,11 @@ app.get('/', (req,res)=>{
 <button class="btn-voucher" type="submit">ENTRAR COM VOUCHER</button>
 </form>
 
-<div class="small">SLS WIFI v9 - 5/10/15 MEGA - R$3/5/12</div>
+</div>
 
 <script>
 let planoSel='1H';
-function sel(p){ planoSel=p; document.querySelectorAll('.plano').forEach(e=>e.classList.remove('ativo')); document.getElementById(p=='1H'?'p1':p=='2H'?'p2':'p3').classList.add('ativo'); }
+function sel(p){ planoSel=p; document.querySelectorAll('.plano').forEach(e=>e.classList.remove('ativo')); document.getElementById(p=='1H'?'p1':p=='3H'?'p2':'p3').classList.add('ativo'); }
 async function gerarPix(){
  let btn=document.getElementById('btnGerar'); btn.innerHTML='GERANDO PIX...'; btn.disabled=true;
  try{
@@ -82,14 +100,13 @@ async function gerarPix(){
   document.getElementById('qrCodeTxt').innerText=d.qrCode;
   document.getElementById('qrBox').style.display='block';
   document.getElementById('qrBox').scrollIntoView({behavior:'smooth'});
-  btn.innerHTML='PIX GERADO - AGUARDANDO PAGAMENTO';
-  // polling
+  btn.innerHTML='PIX GERADO - AGUARDANDO';
   let tx=d.txid;
   let interval=setInterval(async()=>{
    let rs=await fetch('/status/'+tx); let js=await rs.json();
    if(js.status=='CONCLUIDA'){ clearInterval(interval); document.getElementById('statusPix').innerHTML='✅ PAGO! LIBERANDO...'; setTimeout(()=>{ window.location.href='http://10.5.50.1'; },1200); }
   },3000);
- }catch(e){ alert('Erro ao gerar PIX: '+e.message); btn.innerHTML='GERAR PIX - PAGAR AGORA'; btn.disabled=false; }
+ }catch(e){ alert('Erro: '+e.message); btn.innerHTML='GERAR PIX - PAGAR AGORA'; btn.disabled=false; }
 }
 </script>
 </body></html>`);
@@ -97,7 +114,14 @@ async function gerarPix(){
 
 app.get('/api/gerar', async (req,res)=>{
   const {plano,mac,ip}=req.query;
-  const p = PLANOS[plano] || PLANOS["1H"];
+  const PLANOS_MAP = {
+    "1H": { valor: 3.00, tempo: 60, vel: "5M/5M", nome: "1 HORA - 5 MEGA" },
+    "3H": { valor: 5.00, tempo: 180, vel: "10M/10M", nome: "3 HORAS - 10 MEGA" },
+    "24H": { valor: 12.00, tempo: 1440, vel: "15M/15M", nome: "EVENTO TODO - 15 MEGA" },
+    "2H": { valor: 5.00, tempo: 120, vel: "10M/10M", nome: "2 HORAS - 10 MEGA" },
+    "EVENTO": { valor: 12.00, tempo: 1440, vel: "15M/15M", nome: "EVENTO TODO - 15 MEGA" }
+  };
+  const p = PLANOS_MAP[plano] || PLANOS_MAP["1H"];
   try{
     const body={ calendario:{expiracao:600}, valor:{original:p.valor.toFixed(2)}, chave:process.env.EFI_PIX_KEY, infoAdicionais:[{nome:"plano",valor:plano},{nome:"mac",valor:mac||"00:00"},{nome:"ip",valor:ip||"0.0.0.0"},{nome:"tempo",valor:String(p.tempo)},{nome:"velocidade",valor:p.vel}] };
     const cob=await efipay.pixCreateImmediateCharge({},body); 
@@ -114,4 +138,4 @@ app.get('/api/consumido/:ip',(req,res)=>{ fila=fila.filter(f=>f.ip!==req.params.
 app.get('/status/:txid',(req,res)=>res.json(fila.find(f=>f.txid===req.params.txid)||{status:'NAO_ENCONTRADO'}));
 app.get('/configurar-webhook', async (req,res)=>{ try{ const r=await efipay.pixConfigWebhook({chave:process.env.EFI_PIX_KEY},{webhookUrl:'https://hotsport-pix-2.onrender.com/webhook'}); res.json(r);}catch(e){res.json(e)} });
 setInterval(async()=>{ for(const f of fila.filter(f=>f.status==='ATIVA')){ try{ const det=await efipay.pixDetailCharge({txid:f.txid}); if(det.status==='CONCLUIDA'){ f.status='CONCLUIDA'; f.expiraEm=getExp(f.tempoMin); salvar(); } }catch(e){} } },30000);
-app.listen(process.env.PORT||3000, ()=>console.log('SLS v9.7 UMA TELA SO IGUAL PRINT PATH:'+certPath));
+app.listen(process.env.PORT||3000, ()=>console.log('SLS v9.8 PREMIUM ROXO + TELA UNICA HIBRIDO PATH:'+certPath));
