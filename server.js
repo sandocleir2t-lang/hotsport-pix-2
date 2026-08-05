@@ -64,7 +64,7 @@ app.get('/', (req,res)=>{
 
 <div id="p2" class="plano" onclick="sel('2H')"><div class="tag">MAIS VENDIDO</div><div class="row"><div class="left"><div class="ico">🕒</div><div><div><b>2 HORAS - 10 MEGA</b></div><div class="small">Mais vendido - 10 Mega</div></div></div><div style="text-align:right"><div class="price">R$ 5</div><div class="small">2h de acesso</div></div></div></div>
 
-<div id="p3" class="plano" onclick="sel('8H')"><div class="row"><div class="left"><div class="ico">📅</div><div><div><b>EVENTO TODO (8) - 15 MEGA</b></div><div class="small">Ultra rápida o dia todo</div></div></div><div style="text-align:right"><div class="price">R$ 12</div><div class="small">8h de acesso</div></div></div></div>
+<div id="p3" class="plano" onclick="sel('8H')"><div class="row"><div class="left"><div class="ico">📅</div><div><div><b>EVENTO TODO - 15 MEGA</b></div><div class="small">Ultra rápida o dia todo</div></div></div><div style="text-align:right"><div class="price">R$ 12</div><div class="small">8h de acesso</div></div></div></div>
 
 <button class="btn" id="btnGerar" onclick="gerarPix()">GERAR PIX - PAGAR AGORA</button>
 
@@ -118,10 +118,10 @@ app.get('/api/gerar', async (req,res)=>{
   const MAP = {
     "1H": { valor: 3.00, tempo: 60, vel: "5M/5M", nome: "1 HORA - 5 MEGA" },
     "2H": { valor: 5.00, tempo: 120, vel: "10M/10M", nome: "2 HORAS - 10 MEGA" },
-    "8H": { valor: 12.00, tempo: 480, vel: "15M/15M", nome: "EVENTO TODO (8) - 15 MEGA" },
-    "24H": { valor: 12.00, tempo: 480, vel: "15M/15M", nome: "EVENTO TODO (8) - 15 MEGA" },
+    "8H": { valor: 12.00, tempo: 480, vel: "15M/15M", nome: "EVENTO TODO - 15 MEGA" },
+    "24H": { valor: 12.00, tempo: 480, vel: "15M/15M", nome: "EVENTO TODO - 15 MEGA" },
     "3H": { valor: 5.00, tempo: 120, vel: "10M/10M", nome: "2 HORAS - 10 MEGA" },
-    "EVENTO": { valor: 12.00, tempo: 480, vel: "15M/15M", nome: "EVENTO TODO (8) - 15 MEGA" }
+    "EVENTO": { valor: 12.00, tempo: 480, vel: "15M/15M", nome: "EVENTO TODO - 15 MEGA" }
   };
   const p = MAP[plano] || MAP["1H"];
   try{
