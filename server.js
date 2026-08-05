@@ -1,4 +1,4 @@
-// v9.8 SLS WIFI - PREMIUM ROXO + TELA UNICA - HIBRIDO PERFEITO
+// v9.9 SLS WIFI - PREMIUM ROXO + TEMPOS CORRIGIDOS
 const express = require('express');
 const fs = require('fs');
 const EfiPay = require('sdk-node-apis-efi');
@@ -7,8 +7,8 @@ app.use(express.json()); app.use(express.urlencoded({extended:true}));
 
 const PLANOS = {
   "1H": { valor: 3.00, tempo: 60, vel: "5 MEGA", nome: "1 HORA - 5 MEGA", desc: "Ideal para uso rapido", sub: "1h de acesso" },
-  "3H": { valor: 5.00, tempo: 180, vel: "10 MEGA", nome: "3 HORAS - 10 MEGA", desc: "Mais vendido", sub: "3h de acesso", tag: "MAIS VENDIDO" },
-  "24H": { valor: 12.00, tempo: 1440, vel: "15 MEGA", nome: "EVENTO TODO - 15 MEGA", desc: "Ultra rapida o dia todo", sub: "24h de acesso" }
+  "2H": { valor: 5.00, tempo: 120, vel: "10 MEGA", nome: "2 HORAS - 10 MEGA", desc: "Mais vendido", sub: "2h de acesso", tag: "MAIS VENDIDO" },
+  "8H": { valor: 12.00, tempo: 480, vel: "15 MEGA", nome: "EVENTO TODO - 15 MEGA", desc: "Ultra rapida o dia todo", sub: "8h de acesso" }
 };
 
 let certPath = './certs/hotspot-producao.p12';
@@ -60,11 +60,11 @@ app.get('/', (req,res)=>{
 <div class="card">
 <div class="head"><b>ESCOLHA SEU PLANO</b><span class="badge">⚡ Ativação imediata</span></div>
 
-<div id="p1" class="plano ativo" onclick="sel('1H')"><div class="tag" style="background:#ffeb3b;color:#000">1H</div><div class="row"><div class="left"><div class="ico">🕐</div><div><div><b>1 HORA - 5 MEGA</b></div><div class="small">Ideal para uso rápido</div></div></div><div style="text-align:right"><div class="price">R$ 3</div><div class="small">1h de acesso</div></div></div></div>
+<div id="p1" class="plano ativo" onclick="sel('1H')"><div class="row"><div class="left"><div class="ico">🕐</div><div><div><b>1 HORA - 5 MEGA</b></div><div class="small">Ideal para uso rápido</div></div></div><div style="text-align:right"><div class="price">R$ 3</div><div class="small">1h de acesso</div></div></div></div>
 
-<div id="p2" class="plano" onclick="sel('3H')"><div class="tag">MAIS VENDIDO</div><div class="row"><div class="left"><div class="ico">🕒</div><div><div><b>3 HORAS - 10 MEGA</b></div><div class="small">Mais vendido</div></div></div><div style="text-align:right"><div class="price">R$ 5</div><div class="small">3h de acesso</div></div></div></div>
+<div id="p2" class="plano" onclick="sel('2H')"><div class="tag">MAIS VENDIDO</div><div class="row"><div class="left"><div class="ico">🕒</div><div><div><b>2 HORAS - 10 MEGA</b></div><div class="small">Mais vendido - 10 Mega</div></div></div><div style="text-align:right"><div class="price">R$ 5</div><div class="small">2h de acesso</div></div></div></div>
 
-<div id="p3" class="plano" onclick="sel('24H')"><div class="row"><div class="left"><div class="ico">📅</div><div><div><b>EVENTO TODO - 15 MEGA</b></div><div class="small">Ultra rápida o dia todo</div></div></div><div style="text-align:right"><div class="price">R$ 12</div><div class="small">24h de acesso</div></div></div></div>
+<div id="p3" class="plano" onclick="sel('8H')"><div class="row"><div class="left"><div class="ico">📅</div><div><div><b>EVENTO TODO (8) - 15 MEGA</b></div><div class="small">Ultra rápida o dia todo</div></div></div><div style="text-align:right"><div class="price">R$ 12</div><div class="small">8h de acesso</div></div></div></div>
 
 <button class="btn" id="btnGerar" onclick="gerarPix()">GERAR PIX - PAGAR AGORA</button>
 
@@ -87,7 +87,8 @@ app.get('/', (req,res)=>{
 
 <script>
 let planoSel='1H';
-function sel(p){ planoSel=p; document.querySelectorAll('.plano').forEach(e=>e.classList.remove('ativo')); document.getElementById(p=='1H'?'p1':p=='3H'?'p2':'p3').classList.add('ativo'); }
+function sel(p){ planoSel=p; document.querySelectorAll('.plano').forEach(e=>e.classList.remove('ativo')); 
+ document.getElementById(p=='1H'?'p1':p=='2H'?'p2':'p3').classList.add('ativo'); }
 async function gerarPix(){
  let btn=document.getElementById('btnGerar'); btn.innerHTML='GERANDO PIX...'; btn.disabled=true;
  try{
@@ -114,14 +115,15 @@ async function gerarPix(){
 
 app.get('/api/gerar', async (req,res)=>{
   const {plano,mac,ip}=req.query;
-  const PLANOS_MAP = {
+  const MAP = {
     "1H": { valor: 3.00, tempo: 60, vel: "5M/5M", nome: "1 HORA - 5 MEGA" },
-    "3H": { valor: 5.00, tempo: 180, vel: "10M/10M", nome: "3 HORAS - 10 MEGA" },
-    "24H": { valor: 12.00, tempo: 1440, vel: "15M/15M", nome: "EVENTO TODO - 15 MEGA" },
     "2H": { valor: 5.00, tempo: 120, vel: "10M/10M", nome: "2 HORAS - 10 MEGA" },
-    "EVENTO": { valor: 12.00, tempo: 1440, vel: "15M/15M", nome: "EVENTO TODO - 15 MEGA" }
+    "8H": { valor: 12.00, tempo: 480, vel: "15M/15M", nome: "EVENTO TODO (8) - 15 MEGA" },
+    "24H": { valor: 12.00, tempo: 480, vel: "15M/15M", nome: "EVENTO TODO (8) - 15 MEGA" },
+    "3H": { valor: 5.00, tempo: 120, vel: "10M/10M", nome: "2 HORAS - 10 MEGA" },
+    "EVENTO": { valor: 12.00, tempo: 480, vel: "15M/15M", nome: "EVENTO TODO (8) - 15 MEGA" }
   };
-  const p = PLANOS_MAP[plano] || PLANOS_MAP["1H"];
+  const p = MAP[plano] || MAP["1H"];
   try{
     const body={ calendario:{expiracao:600}, valor:{original:p.valor.toFixed(2)}, chave:process.env.EFI_PIX_KEY, infoAdicionais:[{nome:"plano",valor:plano},{nome:"mac",valor:mac||"00:00"},{nome:"ip",valor:ip||"0.0.0.0"},{nome:"tempo",valor:String(p.tempo)},{nome:"velocidade",valor:p.vel}] };
     const cob=await efipay.pixCreateImmediateCharge({},body); 
@@ -138,4 +140,4 @@ app.get('/api/consumido/:ip',(req,res)=>{ fila=fila.filter(f=>f.ip!==req.params.
 app.get('/status/:txid',(req,res)=>res.json(fila.find(f=>f.txid===req.params.txid)||{status:'NAO_ENCONTRADO'}));
 app.get('/configurar-webhook', async (req,res)=>{ try{ const r=await efipay.pixConfigWebhook({chave:process.env.EFI_PIX_KEY},{webhookUrl:'https://hotsport-pix-2.onrender.com/webhook'}); res.json(r);}catch(e){res.json(e)} });
 setInterval(async()=>{ for(const f of fila.filter(f=>f.status==='ATIVA')){ try{ const det=await efipay.pixDetailCharge({txid:f.txid}); if(det.status==='CONCLUIDA'){ f.status='CONCLUIDA'; f.expiraEm=getExp(f.tempoMin); salvar(); } }catch(e){} } },30000);
-app.listen(process.env.PORT||3000, ()=>console.log('SLS v9.8 PREMIUM ROXO + TELA UNICA HIBRIDO PATH:'+certPath));
+app.listen(process.env.PORT||3000, ()=>console.log('SLS v9.9 TEMPOS CORRIGIDOS PATH:'+certPath));
