@@ -78,4 +78,9 @@ app.get('/api/liberacoes',(req,res)=>{ console.log('GET LIBERACOES', fila.length
 app.get('/liberado/:txid',(req,res)=>{ fila=fila.filter(f=>f.txid!==req.params.txid); salvarFila(); console.log('LIBERADO', req.params.txid); res.json({ok:true}); });
 app.get('/api/liberado/:txid',(req,res)=>{ fila=fila.filter(f=>f.txid!==req.params.txid); salvarFila(); console.log('API LIBERADO', req.params.txid); res.json({ok:true}); });
 const PORT=process.env.PORT||3000;
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req,res)=>{
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 app.listen(PORT,()=>console.log('SLS v12.1 /tmp PERSISTENTE OK PORT',PORT));
