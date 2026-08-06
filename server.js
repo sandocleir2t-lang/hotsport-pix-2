@@ -8,7 +8,6 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// ===== PERSISTENCIA /tmp (Render free zera disco) =====
 const LIB_FILE_TMP = '/tmp/liberacoes.json';
 const LIB_FILE_SRC = path.join(__dirname, 'liberacoes.json');
 let liberacoes = [];
@@ -31,13 +30,10 @@ function salvarLibs() {
   } catch {}
 }
 
-// ===== EFI / CERT =====
 let efi = null;
 try {
   const certDir = path.join(__dirname, 'certs');
   if (!fs.existsSync(certDir)) fs.mkdirSync(certDir, { recursive: true });
-
-  // procura p12 no projeto e copia pra /tmp se precisar
   let certPath = null;
   const possible = fs.readdirSync(certDir).find(f => f.endsWith('.p12'));
   if (possible) {
@@ -46,31 +42,45 @@ try {
       fs.copyFileSync(path.join(certDir, possible), certPath);
     }
   }
-
   if (certPath && fs.existsSync(certPath)) {
     console.log('CERT OK');
     const options = {
-      sandbox: false, // true = homologação, false = produção
+      sandbox: false,
       client_id: process.env.EFI_CLIENT_ID,
       client_secret: process.env.EFI_CLIENT_SECRET,
       certificate: certPath,
       cert_base64: false
     };
-    // pix key vem da EFI também
     efi = new EfiPay(options);
   } else {
-    console.log('CERT NOT FOUND em', certDir);
+    console.log('CERT NOT FOUND');
   }
 } catch (err) {
   console.log('CERT ERROR', err.message);
 }
 
-console.log('SLS v12.1 /tmp PERSISTENTE OK PORT 10000');
+console.log('SLS v12.2 /tmp PERSISTENTE OK PORT 10000');
 
-// ===== ROTAS API QUE O MIKROTIK USA =====
+// ===== API LIBERACOES =====
 app.get('/api/liberacoes', (req, res) => {
   console.log(`GET LIBERACOES ${liberacoes.length}`);
   res.json(liberacoes);
+});
+
+// ROTA FACIL PRA LIMPAR PELO NAVEGADOR
+app.get('/api/liberacoes/limpar', (req, res) => {
+  liberacoes = [];
+  salvarLibs();
+  console.log('LIBERACOES LIMPAS VIA /limpar');
+  res.send('LIBERACOES LIMPAS! Agora seu Mikrotik vai parar de dar loop. Pode fechar esta aba.');
+});
+
+app.get('/api/liberacoes/delete/:mac', (req, res) => {
+  const alvo = req.params.mac;
+  liberacoes = liberacoes.filter(l => l.mac !== alvo && !l.mac.startsWith('00:00:00:00'));
+  if (alvo === 'tudo' || alvo === 'all') liberacoes = [];
+  salvarLibs();
+  res.send(`Removido ${alvo}. Restam ${liberacoes.length}. Lista: ${JSON.stringify(liberacoes)}`);
 });
 
 app.post('/api/liberacoes', (req, res) => {
@@ -93,47 +103,34 @@ app.delete('/api/liberacoes/:mac', (req, res) => {
   res.json({ ok: true });
 });
 
-// ===== PIX GERAR =====
+// ===== PIX =====
 app.post('/gerar', async (req, res) => {
   try {
     const { valor, tempo, mac, ip } = req.body;
     const valorNum = Number(valor);
     if (!valorNum) return res.status(400).json({ error: 'valor invalido' });
-
-    if (!efi) {
-      return res.status(500).json({ error: 'EFI não configurado - CERT ou ENV faltando' });
-    }
-
-    const txid = 'SLS' + Date.now().toString().slice(-10) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-    // valor tem que ser string com 2 casas
-    const valorStr = valorNum.toFixed(2);
+    if (!efi) return res.status(500).json({ error: 'EFI não configurado' });
 
     const body = {
       calendario: { expiracao: 3600 },
-      devedor: { cpf: '12345678909', nome: 'Cliente SLS WIFI' }, // pode ser genérico
-      valor: { original: valorStr },
-      chave: process.env.EFI_PIX_KEY, // sua chave PIX cadastrada na EFI
+      devedor: { cpf: '12345678909', nome: 'Cliente SLS WIFI' },
+      valor: { original: valorNum.toFixed(2) },
+      chave: process.env.EFI_PIX_KEY,
       solicitacaoPagador: `SLS WIFI ${tempo || ''} - ${mac || ''}`,
       infoAdicionais: [{ nome: 'MAC', valor: mac || 'semmac' }, { nome: 'IP', valor: ip || '' }, { nome: 'TEMPO', valor: tempo || '' }]
     };
 
     const charge = await efi.pixCreateImmediateCharge({}, body);
-    // gera qrcode
     const qrcode = await efi.pixGenerateQRCode({ id: charge.loc.id });
 
-    // salva pendente pra liberar depois que pagar
-    // quando o webhook ou verifica confirmar, libera
-    // por enquanto só retornamos
-
     return res.json({
-      txid: charge.txid || txid,
+      txid: charge.txid,
       locId: charge.loc.id,
       qrcode: qrcode.qrcode,
       copiaecola: qrcode.qrcode,
-      imagem: qrcode.imagemQrcode, // base64
+      imagem: qrcode.imagemQrcode,
       expiracao: charge.calendario.expiracao
     });
-
   } catch (err) {
     console.error('ERRO /gerar', err);
     const msg = err?.mensagem || err?.message || JSON.stringify(err);
@@ -141,23 +138,17 @@ app.post('/gerar', async (req, res) => {
   }
 });
 
-// ===== PIX VERIFICA (polling) =====
 app.get('/verifica/:txid', async (req, res) => {
   try {
     const { txid } = req.params;
     if (!efi) return res.json({ status: 'PENDENTE' });
-
-    // lista pix por txid
     const detail = await efi.pixDetailCharge({ txid });
     const status = detail.status || 'ATIVA';
-
     if (status === 'CONCLUIDA') {
-      // tenta achar mac nas infoAdicionais e libera
       const macInfo = detail.infoAdicionais?.find(i => i.nome === 'MAC')?.valor;
       const tempoInfo = detail.infoAdicionais?.find(i => i.nome === 'TEMPO')?.valor || '1h';
       const ipInfo = detail.infoAdicionais?.find(i => i.nome === 'IP')?.valor || '';
-
-      if (macInfo && macInfo !== 'semmac') {
+      if (macInfo && macInfo !== 'semmac' && !macInfo.startsWith('00:00')) {
         liberacoes = liberacoes.filter(l => l.mac !== macInfo);
         liberacoes.push({ mac: macInfo, ip: ipInfo, tempo: tempoInfo, data: Date.now(), txid });
         salvarLibs();
@@ -167,18 +158,15 @@ app.get('/verifica/:txid', async (req, res) => {
     }
     return res.json({ status, pago: false });
   } catch (err) {
-    // se txid não encontrado, retorna pendente
     return res.json({ status: 'ATIVA', pago: false });
   }
 });
 
-// Webhook opcional da EFI
 app.post('/webhook', (req, res) => {
   console.log('WEBHOOK PIX', JSON.stringify(req.body).slice(0, 500));
   res.status(200).end();
 });
 
-// ===== STATIC POR ULTIMO (IMPORTANTE PRA NÃO DAR 404 NO /gerar) =====
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
