@@ -2,37 +2,49 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const EfiPay = require('sdk-node-apis-efi');
+
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// --- CERTIFICADO EFI ---
 const CERT_PATH = '/tmp/hotspot-producao.p12';
-function garanteCertificado(){try{const b=process.env.EFI_CERTIFICADO_BASE64;if(!b)return;fs.writeFileSync(CERT_PATH,Buffer.from(b.replace(/\s/g,''),'base64'));}catch(e){}}
+function garanteCertificado() {
+  try {
+    const b64 = process.env.EFI_CERTIFICADO_BASE64;
+    if (!b64) {
+      console.log('[CERT] EFI_CERTIFICADO_BASE64 não encontrado');
+      return;
+    }
+    const limpo = b64.replace(/\s/g, '');
+    fs.writeFileSync(CERT_PATH, Buffer.from(limpo, 'base64'));
+    console.log('[CERT] Certificado gravado OK em', CERT_PATH);
+  } catch (e) {
+    console.log('[CERT] ERRO ao gravar:', e.message);
+  }
+}
 garanteCertificado();
-const efiOptions={sandbox:false,client_id:process.env.EFI_CLIENT_ID,client_secret:process.env.EFI_CLIENT_SECRET,certificate:CERT_PATH,certificado:CERT_PATH,pixCert:CERT_PATH};
-let fila=[];
-app.get('/',(req,res)=>{
-res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SLS WIFI</title>
-<style>*{margin:0;padding:0;box-sizing:border-box;font-family:Arial}body{background:#0d0d12;display:flex;justify-content:center;color:#fff}.box{width:100%;max-width:400px;padding:0 12px 20px}.top{text-align:center;color:#777;font-size:10px;letter-spacing:1px;margin:14px 0}.dot{display:inline-block;width:8px;height:8px;background:#00e676;border-radius:50%;box-shadow:0 0 8px #00e676;margin-right:6px}.logoWrap{background:#15151f;border:1px solid #232330;border-radius:16px;padding:14px 16px;margin:10px 0}.logo{display:flex;align-items:center;gap:10px;font-size:26px;font-weight:900}.logo i{background:linear-gradient(135deg,#ff8c00,#ffb300);width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-style:normal}.logo span{color:#a78bfa;font-weight:400}.sub{color:#666;font-size:12px;text-align:center;margin-top:6px}.aviso{background:#ffeb3b;color:#000;text-align:center;padding:12px;border-radius:12px;font-weight:900;font-size:13px;margin:14px 0}.head{display:flex;justify-content:space-between;align-items:center;margin:16px 4px}.head b{font-size:18px;font-weight:800;line-height:1.1}.badge{background:#2a2340;color:#a78bfa;font-size:11px;padding:6px 12px;border-radius:20px}.card{position:relative;background:#15151f;border:1.5px solid #252535;border-radius:16px;padding:14px 16px;margin:12px 0;display:flex;justify-content:space-between;align-items:center;cursor:pointer}.card.ativo{border-color:#ffeb3b;box-shadow:0 0 0 1px #ffeb3b}.left{display:flex;gap:10px;align-items:center}.icon{width:32px;height:32px;background:#1f1f2e;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px}.tit{font-size:16px;font-weight:800;line-height:1.1}.subt{font-size:11px;color:#777;margin-top:2px}.price{text-align:right}.price b{font-size:20px;display:block}.price small{font-size:11px;color:#777}.tagMais{position:absolute;top:-10px;right:18px;background:#a855f7;color:#fff;font-size:10px;font-weight:900;padding:4px 10px;border-radius:8px}.btn{background:#ffeb3b;color:#000;width:100%;border:0;padding:16px;border-radius:14px;font-weight:900;font-size:16px;margin:16px 0}.voucher p{color:#555;text-align:center;font-size:13px;margin:10px}.voucher input{width:100%;background:transparent;border:1.5px solid #2a2a3a;color:#fff;padding:14px;border-radius:10px;margin:6px 0;font-size:14px}.btnV{background:#3a3560;color:#a78bfa;border:0;width:100%;padding:14px;border-radius:12px;font-weight:800;margin-top:8px}#pixArea{display:none;background:#fff;color:#000;border-radius:16px;padding:16px;margin-top:12px;text-align:center}</style></head><body><div class="box">
-<div class="top"><div class="dot"></div>ONLINE • 247 CLIENTES<br>CONECTADOS</div>
-<div class="logoWrap"><div class="logo"><i>📶</i>SLS <span>WIFI</span></div><div class="sub">Internet rápida • Pagamento instantâneo via PIX</div></div>
-<div class="aviso">NAO FECHE ESTA TELA ATE PAGAR!</div>
-<div class="head"><b>ESCOLHA SEU<br>PLANO</b><span class="badge">⚡ Ativação<br>imediata</span></div>
-<div class="card ativo" id="c1" onclick="sel('c1','3.00',60)"><div class="left"><div class="icon">🕐</div><div><div class="tit">1 HORA - 5<br>MEGA</div><div class="subt">Ideal para uso rápido</div></div></div><div class="price"><b>R$ 3</b><small>1h de acesso</small></div></div>
-<div class="card" id="c2" onclick="sel('c2','5.00',120)"><div class="tagMais">MAIS VENDIDO</div><div class="left"><div class="icon">🕐</div><div><div class="tit">2 HORAS - 10<br>MEGA</div><div class="subt">Mais vendido - 10<br>Mega</div></div></div><div class="price"><b>R$ 5</b><small>2h de<br>acesso</small></div></div>
-<div class="card" id="c3" onclick="sel('c3','12.00',480)"><div class="left"><div class="icon">📅</div><div><div class="tit">EVENTO TODO -<br>15 MEGA</div><div class="subt">Ultra rápida o dia todo</div></div></div><div class="price"><b>R$<br>12</b><small>8h de<br>acesso</small></div></div>
-<button class="btn" onclick="gerar()">GERAR PIX - PAGAR<br>AGORA</button>
-<div id="pixArea"></div>
-<div class="voucher"><p>TEM VOUCHER?</p><input id="v1" placeholder="CODIGO VOUCHER"><input id="v2" placeholder="SENHA" type="password"><button class="btnV" onclick="loginV()">ENTRAR COM VOUCHER</button></div>
-</div><script>
-var plano={valor:'3.00',tempo:60};
-function sel(id,v,t){document.querySelectorAll('.card').forEach(c=>c.classList.remove('ativo'));document.getElementById(id).classList.add('ativo');plano={valor:v,tempo:t};}
-async function gerar(){var a=document.getElementById('pixArea');a.style.display='block';a.innerHTML='Gerando PIX R$ '+plano.valor+'... 0,001s';try{var r=await fetch('/criar-pix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:plano.valor,tempo:plano.tempo})});var j=await r.json();if(j.erro)throw new Error(j.erro);a.innerHTML='<b style=color:#00c853>PIX R$ '+plano.valor+' GERADO</b><br><img src='+j.imagemQrcode+' style=width:240px;margin:10px 0;border-radius:8px><br><textarea id=cp style=width:100%;height:70px;font-size:10px;border:1px solid #ddd;border-radius:6px;padding:6px>'+j.copia_e_cola+'</textarea><br><button onclick="navigator.clipboard.writeText(document.getElementById(\'cp\').value);alert(\'COPIADO\')" style=background:#00c853;color:#fff;width:100%;padding:12px;border:0;border-radius:10px;font-weight:900;margin-top:8px>COPIAR CODIGO PIX</button><div id=sMsg style=background:#ffeb3b;color:#000;padding:10px;border-radius:8px;margin-top:10px;font-weight:800;font-size:12px">Aguardando pagamento...</div>';var tx=j.txid;setInterval(async()=>{try{var s=await fetch('/status/'+tx);var js=await s.json();if(js.status==='CONCLUIDA'){document.getElementById('sMsg').innerHTML='✅ PAGO! LIBERADO!';document.getElementById('sMsg').style.background='#00c853';document.getElementById('sMsg').style.color='#fff';}}catch(e){}},4000);}catch(e){a.innerHTML='ERRO: '+e.message;}}
-function loginV(){var u=document.getElementById('v1').value;var p=document.getElementById('v2').value;if(!u||!p){alert('Preencha voucher');return;}var f=document.createElement('form');f.method='POST';f.action='$(link-login-only)';f.innerHTML='<input name=username value=\''+u+'\'><input name=password value=\''+p+'\'><input name=dst value=\'$(link-orig)\'><input name=popup value=\'true\'>';document.body.appendChild(f);f.submit();}
-</script></body></html>`);
-});
-app.post('/criar-pix',async(req,res)=>{try{if(!fs.existsSync(CERT_PATH))garanteCertificado();const efipay=new EfiPay(efiOptions);const body={calendario:{expiracao:3600},valor:{original:req.body.valor.toString()},chave:process.env.EFI_CHAVE_PIX};const cob=await efipay.pixCreateImmediateCharge([],body);const qrcode=await efipay.pixGenerateQRCode({id:cob.loc.id});fila.push({txid:cob.txid,tempo:req.body.tempo,valor:req.body.valor,status:'AGUARDANDO'});res.json({txid:cob.txid,imagemQrcode:qrcode.imagemQrcode,copia_e_cola:qrcode.qrcode});}catch(err){console.log(err);res.status(500).json({erro:err.message});}});
-app.get('/status/:txid',async(req,res)=>{try{const efipay=new EfiPay(efiOptions);const c=await efipay.pixDetailCharge({txid:req.params.txid});if(c.status==='CONCLUIDA'){let i=fila.find(f=>f.txid===req.params.txid);if(i)i.status='PAGO_LIBERAR';}res.json(c);}catch(e){res.status(500).json({erro:e.message})}});
-app.get('/fila',(req,res)=>{res.json(fila.filter(f=>f.status==='PAGO_LIBERAR'));});
-app.get('/api/liberacoes',(req,res)=>{res.json(fila.filter(f=>f.status==='PAGO_LIBERAR'));});
-app.get('/liberado/:txid',(req,res)=>{fila=fila.filter(f=>f.txid!==req.params.txid);res.json({ok:true});});
-const PORT=process.env.PORT||3000;app.listen(PORT,()=>console.log('SLS IDENTICO FINAL ONLINE',PORT));
+
+const efiOptions = {
+  sandbox: false,
+  client_id: process.env.EFI_CLIENT_ID,
+  client_secret: process.env.EFI_CLIENT_SECRET,
+  certificate: CERT_PATH,
+  certificado: CERT_PATH,
+  pixCert: CERT_PATH
+};
+
+let fila = []; // {txid, tempo, valor, status}
+
+// --- FRONTEND 100% IGUAL DA SUA FOTO ---
+app.get('/', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>SLS WIFI EVENTOS</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+body{background:#0f0f12;display:flex;justify-content:center;color:#fff;min-height:100vh}
+.box{width:100%;max-width:400px;background:#16161a;min-height:100vh;padding:14px}
+.top{display:flex;align-items:center;justify-content:center;gap:6px;color:#555;font-size:11px;letter-spacing:.5px;margin-top:8px}
+.dot{width:8px;height:8px;background:#00e676;border-radius:50%;box-shadow:0 0 6px #00e676}
+.logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:10px}
+.logo i{width:38px;height:38px;background:linear-gradient(135deg,#ff8a00,#ffb700);border-radius:10px;display:flex;align-items:center
