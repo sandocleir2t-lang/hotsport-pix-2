@@ -201,5 +201,17 @@ app.get('/api/liberado/:txid', (req, res) => {
 });
 
 app.get('/fila', (req, res) => res.json(fila));
-
+app.get('/debug-efi', (req,res)=>{
+  const vars = {
+    tem_CLIENT_ID: !!process.env.EFI_CLIENT_ID,
+    tem_SECRET: !!process.env.EFI_CLIENT_SECRET,
+    tem_CHAVE: !!process.env.EFI_CHAVE_PIX,
+    tem_CERT_BASE64: !!process.env.EFI_CERTIFICADO_BASE64,
+    tamanho_CERT_BASE64: process.env.EFI_CERTIFICADO_BASE64 ? process.env.EFI_CERTIFICADO_BASE64.length : 0,
+    cert_existe_no_tmp: fs.existsSync(CERT_PATH),
+    tamanho_cert_tmp: fs.existsSync(CERT_PATH) ? fs.statSync(CERT_PATH).size : 0,
+    sandbox_configurado: efiOptions.sandbox
+  };
+  res.json(vars);
+});
 app.listen(process.env.PORT || 3000, () => console.log('SLS WIFI v10 ONLINE PERSISTENTE'));
