@@ -47,7 +47,7 @@ body{background:#0f0f14;color:#fff;min-height:100vh;display:flex;justify-content
     <h1>SLS<span>WIFI</span></h1>
     <p>Internet rápida • Pagamento instantâneo via PIX</p>
   </div>
-  <div class="alert">⚠️ NAO FECHE ESTA TELA ATE PAGAR!</div>
+  <div class="alert">⚠ NAO FECHE ESTA TELA ATE PAGAR!</div>
 
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <b style="font-size:13px">ESCOLHA SEU PLANO</b>
@@ -89,9 +89,8 @@ body{background:#0f0f14;color:#fff;min-height:100vh;display:flex;justify-content
 
   <div class="error" id="errorBox"></div>
 
-  <div class="footer">
-    MAC: $(mac) • IP: $(ip) • SLS WIFI © 2025 • Suporte local<br>
-    Ao pagar você concorda com o uso responsável da rede.
+  <div class="footer" id="footerMac">
+    MAC: carregando... • IP: ... • SLS WIFI © 2025
   </div>
 </div>
 
@@ -106,16 +105,32 @@ document.querySelectorAll('.plan-box').forEach(box=>{
   });
 });
 
-// Pega MAC/IP que o Mikrotik injeta - se não tiver, usa genérico
-let mac = "$(mac)";
-let ip = "$(ip)";
-if(mac.includes('$')) mac = '00:00:00:00:00:00';
+// === CORREÇÃO DO MAC - LÊ DA URL ===
+const urlParams = new URLSearchParams(window.location.search);
+let macRaw = urlParams.get('mac') || urlParams.get('mac-esc') || "$(mac)";
+let ipRaw = urlParams.get('ip') || "$(ip)";
+try{ macRaw = decodeURIComponent(macRaw); }catch{}
+try{ ipRaw = decodeURIComponent(ipRaw); }catch{}
+let mac = macRaw.replace(/%3A/gi, ':').trim();
+let ip = ipRaw.trim();
+if(mac.includes('$') || mac.includes('(') || mac.length < 8){
+  // se ainda não tem mac, tenta pegar sem decode
+  mac = urlParams.get('mac') || '00:00:00:00:00:00';
+  try{ mac = decodeURIComponent(mac); }catch{}
+}
 if(ip.includes('$')) ip = '0.0.0.0';
+console.log('URL completa:', window.location.search);
+console.log('MAC CAPTURADO:', mac, 'IP:', ip);
+document.getElementById('footerMac').innerText = 'MAC: '+mac+' • IP: '+ip+' • SLS WIFI © 2025 - Se MAC for 00:00 reconecte no WIFI';
 
 const btn = document.getElementById('btnGerar');
 const errorBox = document.getElementById('errorBox');
 
 btn.addEventListener('click', async ()=>{
+  if(mac === '00:00:00:00:00:00' || mac === '00:00:00:00'){
+    alert('ERRO: MAC está 00:00! Você abriu o site direto. Conecte no WIFI SLS e abra pelo portal. URL: '+window.location.search);
+    return;
+  }
   errorBox.style.display='none';
   btn.disabled=true;
   btn.textContent='GERANDO PIX...';
@@ -135,21 +150,22 @@ btn.addEventListener('click', async ()=>{
     document.getElementById('pixArea').style.display='block';
     document.getElementById('pixArea').scrollIntoView({behavior:'smooth'});
 
-    // Poll verifica
     const txid = data.txid;
     const interval = setInterval(async ()=>{
       try{
         const v = await fetch('/verifica/'+txid).then(r=>r.json());
-        if(v.status==='CONCLUIDA' || v.status==='pago' || v.pago){
+        if(v.status==='CONCLUIDA' || v.pago){
           clearInterval(interval);
-          alert('PAGAMENTO CONFIRMADO! Conectando...');
-          window.location.href = `http://10.10.10.1/login?username=${txid}&password=${txid}`;
+          alert('PAGAMENTO CONFIRMADO! Liberando '+mac);
+          // libera via api
+          await fetch('/api/liberacoes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mac, ip, tempo: planoSelecionado.tempo})});
+          document.getElementById('pixArea').innerHTML = '<h2 style="color:green">✅ LIBERADO!<br>MAC '+mac+'</h2><p>Pode usar a internet!</p>';
         }
       }catch{}
     }, 3000);
 
   }catch(err){
-    errorBox.textContent = 'Erro de conexão. Tente novamente. '+err.message;
+    errorBox.textContent = 'Erro: '+err.message;
     errorBox.style.display='block';
   }finally{
     btn.disabled=false;
@@ -168,8 +184,6 @@ function loginVoucher(){
   if(!u||!p){ alert('Digite voucher e senha'); return; }
   window.location.href = `http://10.10.10.1/login?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`;
 }
-
-// contador fake
 setInterval(()=>{ document.getElementById('count').textContent = 240+Math.floor(Math.random()*15); },5000);
 </script>
 </body>
