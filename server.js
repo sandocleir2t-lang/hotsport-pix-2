@@ -136,6 +136,23 @@ app.get('/api/gerar', async (req,res)=>{
 
 app.post('/webhook', async (req,res)=>{ const list=req.body.pix||[]; for(let p of list){ let i=fila.findIndex(f=>f.txid===p.txid); if(i>=0){ fila[i].status='CONCLUIDA'; fila[i].expiraEm=getExp(fila[i].tempoMin); salvar(); } } res.json({ok:true}); });
 app.get('/api/liberacoes',(req,res)=>res.json(fila.filter(f=>f.status==='CONCLUIDA'&&f.expiraEm>Date.now())));
+// === SLS - NOVO: ON LOGIN DO MIKROTIK CHAMA AQUI ===
+let usados = [];
+try{ if(fs.existsSync('/tmp/usados.json')) usados = JSON.parse(fs.readFileSync('/tmp/usados.json')); }catch(e){}
+const salvarUsados = ()=>{ try{ fs.writeFileSync('/tmp/usados.json', JSON.stringify(usados)) }catch(e){} };
+
+app.get('/api/consumido', (req,res)=>{
+  const { voucher, mac, ip } = req.query;
+  console.log(`VOUCHER CONSUMIDO: ${voucher} | MAC:${mac} | IP:${ip}`);
+  if(voucher && !usados.includes(voucher)){
+    usados.push({ voucher, mac, ip, data: new Date().toISOString() });
+    salvarUsados();
+  }
+  res.send('OK '+voucher);
+});
+
+app.get('/api/usados', (req,res)=> res.json(usados) );
+// === FIM DO BLOCO NOVO ===
 app.get('/api/consumido/:ip',(req,res)=>{ fila=fila.filter(f=>f.ip!==req.params.ip); salvar(); res.json({ok:true}); });
 app.get('/status/:txid',(req,res)=>res.json(fila.find(f=>f.txid===req.params.txid)||{status:'NAO_ENCONTRADO'}));
 app.get('/configurar-webhook', async (req,res)=>{ try{ const r=await efipay.pixConfigWebhook({chave:process.env.EFI_PIX_KEY},{webhookUrl:'https://hotsport-pix-2.onrender.com/webhook'}); res.json(r);}catch(e){res.json(e)} });
