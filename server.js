@@ -1,217 +1,119 @@
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
-const EfiPay = require('sdk-node-apis-efi'); // SEM .default
-
+const EfiPay = require('sdk-node-apis-efi');
 const app = express();
 app.use(cors());
 app.use(express.json());
-
 const CERT_PATH = '/tmp/hotspot-producao.p12';
 const FILA_PATH = './fila.json';
 
-function garanteCertificado() {
-  const base64 = process.env.EFI_CERTIFICADO_BASE64;
-  if (!base64) return;
-  try {
-    const limpo = base64.replace(/\s/g, '');
-    fs.writeFileSync(CERT_PATH, Buffer.from(limpo, 'base64'));
-  } catch(e){ console.log("Erro cert", e.message) }
+function garanteCertificado(){
+  try{
+    const b64=process.env.EFI_CERTIFICADO_BASE64;
+    if(!b64){console.log('SEM CERT');return;}
+    fs.writeFileSync(CERT_PATH,Buffer.from(b64.replace(/\s/g,''),'base64'));
+    console.log('CERT OK');
+  }catch(e){console.log('ERRO CERT',e.message);}
 }
 garanteCertificado();
+const efiOptions={sandbox:false,client_id:process.env.EFI_CLIENT_ID,client_secret:process.env.EFI_CLIENT_SECRET,certificate:CERT_PATH,certificado:CERT_PATH,pixCert:CERT_PATH};
 
-// --- PERSISTÊNCIA ---
-let fila = {};
-function carregarFila(){
-  try {
-    if(fs.existsSync(FILA_PATH)){
-      fila = JSON.parse(fs.readFileSync(FILA_PATH, 'utf8'));
-    }
-  } catch(e){ fila = {} }
-}
-function salvarFila(){
-  try { fs.writeFileSync(FILA_PATH, JSON.stringify(fila)); } catch(e){}
-}
-carregarFila();
-
-const efiOptions = {
-  sandbox: false,
-  client_id: process.env.EFI_CLIENT_ID,
-  client_secret: process.env.EFI_CLIENT_SECRET,
-  certificado: CERT_PATH,
-  pixCert: CERT_PATH
-};
-
-// ===== PÁGINA CLIENTE =====
-app.get('/', (req, res) => {
-  res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SLS WIFI EVENTOS</title>
-<style>
-body{font-family:sans-serif;background:#111;color:#fff;text-align:center;padding:20px}
-.card{background:#222;border-radius:15px;padding:20px;margin:15px 0}
-button{background:#00ff88;color:#000;border:0;padding:15px 30px;border-radius:10px;font-size:18px;font-weight:bold;width:100%;cursor:pointer}
-button:disabled{opacity:0.5}
-img{width:280px;background:#fff;padding:10px;border-radius:10px;margin-top:20px}
-textarea{width:95%;height:80px}
-#statusPaga{background:#00ff88;color:#000;padding:15px;border-radius:10px;font-weight:bold;font-size:20px;margin-top:15px;display:block;text-decoration:none}
-</style>
-</head>
-<body>
-<h1>🔥 SLS WIFI EVENTOS</h1>
-<p>Escolha seu plano para liberar</p>
-
-<div class="card"><h2>1 Hora - R$ 3,00</h2><button onclick="gerar('3.00',60)">COMPRAR 1H</button></div>
-<div class="card"><h2>3 Horas - R$ 6,00</h2><button onclick="gerar('6.00',180)">COMPRAR 3H</button></div>
-<div class="card"><h2>Dia Todo - R$ 10,00</h2><button onclick="gerar('10.00',1440)">COMPRAR DIA</button></div>
-
-<div id="pix" style="display:none"></div>
-
-<script>
-let txidAtual = null;
-async function gerar(valor, tempo){
-  document.getElementById('pix').style.display='block';
-  document.getElementById('pix').innerHTML='<h2>Gerando PIX REAL...</h2>';
-  window.scrollTo(0,document.body.scrollHeight);
-  const r = await fetch('/criar-pix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:'Cliente Evento',valor,tempo})});
-  const j = await r.json();
-  if(j.imagem){
-    txidAtual = j.txid;
-    document.getElementById('pix').innerHTML='<h2>✅ PIX REAL GERADO</h2><img src="'+j.imagem+'"><p>Copia e cola:</p><textarea>'+j.copia_e_cola+'</textarea><p id="status">Aguardando pagamento...<br>TXID:'+j.txid+'</p>';
-    checar(j.txid);
-  } else {
-    document.getElementById('pix').innerHTML='ERRO:'+JSON.stringify(j);
+// --- PERSISTÊNCIA QUE FALTAVA ---
+let fila=[];
+try{
+  if(fs.existsSync(FILA_PATH)){
+    fila = JSON.parse(fs.readFileSync(FILA_PATH,'utf8'));
+    console.log("FILA CARREGADA:", fila.length);
   }
+}catch(e){ fila=[]; }
+function salvarFila(){
+  try{ fs.writeFileSync(FILA_PATH, JSON.stringify(fila)); }catch(e){ console.log("ERRO SALVAR FILA", e.message); }
 }
-async function checar(txid){
-  const intervalo = setInterval(async()=>{
-    const r = await fetch('/status/'+txid);
-    const j = await r.json();
-    if(j.status==='CONCLUIDA' || j.status==='PAGO'){
-      clearInterval(intervalo);
-      document.getElementById('pix').innerHTML += '<a id="statusPaga" href="#" onclick="liberar(\\''+txid+'\\')">✅ PAGO! CLIQUE PARA LIBERAR</a>';
-    }
-  },4000);
+
+app.get('/',(req,res)=>{
+res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SLS WIFI EVENTOS</title>
+<style>*{margin:0;padding:0;box-sizing:border-box;font-family:Arial}body{background:#0f0f12;display:flex;justify-content:center;color:#fff}.box{width:100%;max-width:400px;background:#16161a;min-height:100vh;padding:14px}.top{display:flex;align-items:center;justify-content:center;gap:6px;color:#555;font-size:11px;margin-top:8px}.dot{width:8px;height:8px;background:#00e676;border-radius:50%}.logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:10px}.logo i{width:38px;height:38px;background:linear-gradient(135deg,#ff8a00,#ffb700);border-radius:10px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:20px}.logo b{font-size:30px;font-weight:900}.sub{color:#555;text-align:center;font-size:13px;margin-top:6px}.aviso{background:#FFEB3B;color:#000;text-align:center;padding:12px;border-radius:12px;font-weight:900;font-size:12px;margin:16px 0}.head{display:flex;justify-content:space-between;align-items:flex-start;margin:16px 2px}.head b{font-size:17px;line-height:1.1}.badge{background:#26263a;color:#9d9de0;font-size:10px;padding:8px 12px;border-radius:20px}.card{position:relative;border:1.8px solid #2a2a32;background:#222228;border-radius:16px;padding:14px;margin:12px 0;display:flex;justify-content:space-between;align-items:center}.card.ativo{border-color:#FFEB3B;box-shadow:0 0 0 1px #FFEB3B}.tagMais{position:absolute;top:-10px;right:16px;background:#8b5cf6;color:#fff;font-size:9px;font-weight:900;padding:5px 12px;border-radius:20px}.left{display:flex;align-items:center;gap:10px}.ic{width:28px;height:28px;background:#2a2a32;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px}.tit{font-size:15px;font-weight:900;line-height:1.1}.price{text-align:right;min-width:60px}.price b{font-size:20px}.price small{font-size:10px;color:#666;display:block}.btn{width:100%;background:#FFEB3B;color:#000;border:0;padding:18px;border-radius:14px;font-weight:900;font-size:15px;margin-top:10px}.voucher{margin-top:18px}.voucher p{text-align:center;color:#444;font-size:12px;margin-bottom:8px}.voucher input{width:100%;background:#222228;border:1px solid #2f2f38;color:#fff;padding:15px;border-radius:12px;margin:6px 0;font-size:14px}.btnV{width:100%;background:#2e2e4a;color:#8b8bff;border:0;padding:15px;border-radius:12px;font-weight:800;font-size:13px;margin-top:6px}#pixArea{display:none;background:#fff;color:#000;border-radius:18px;padding:16px;margin-top:14px;text-align:center}#pixArea img{width:240px;height:240px;border-radius:12px}#pixArea textarea{width:100%;height:70px;font-size:10px;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:8px}</style></head><body><div class="box">
+<div class="top"><div class="dot"></div>ONLINE - 247 CLIENTES CONECTADOS</div>
+<div class="logo"><i>📊</i><b>SLS<span>WIFI</span></b></div>
+<div class="sub">Internet rápida - Pagamento instantâneo via PIX</div>
+<div class="aviso">NAO FECHE ESTA TELA ATE PAGAR!</div>
+<div class="head"><div><b>ESCOLHA SEU<br>PLANO</b></div><div class="badge">⚡ Ativação imediata</div></div>
+<div class="card ativo" id="c1" onclick="sel('c1','3.00',60)"><div class="left"><div class="ic">🕐</div><div><div class="tit">1 HORA - 5</div><div style="font-weight:900">MEGA</div><div style="font-size:11px;color:#666">Ideal para uso rápido</div></div></div><div class="price"><b>R$ 3</b><small>1h de acesso</small></div></div>
+<div class="card" id="c2" onclick="sel('c2','5.00',120)"><div class="tagMais">MAIS VENDIDO</div><div class="left"><div class="ic">🕐</div><div><div class="tit">2 HORAS - 10</div><div style="font-weight:900">MEGA</div><div style="font-size:11px;color:#666">Mais vendido - 10 Mega</div></div></div><div class="price"><b>R$ 5</b><small>2h de acesso</small></div></div>
+<div class="card" id="c3" onclick="sel('c3','12.00',480)"><div class="left"><div class="ic">📅</div><div><div class="tit">EVENTO TODO -</div><div style="font-weight:900">15 MEGA</div><div style="font-size:11px;color:#666">Ultra rápida o dia todo</div></div></div><div class="price"><b>R$<br>12</b><small>8h de acesso</small></div></div>
+<button class="btn" id="btnGerar" onclick="gerar()">GERAR PIX - PAGAR<br>AGORA</button>
+<div id="pixArea"></div>
+<div class="voucher"><p>TEM VOUCHER?</p><input id="vcod" placeholder="CODIGO VOUCHER"><input id="vsen" placeholder="SENHA" type="password"><button class="btnV">ENTRAR COM VOUCHER</button></div>
+</div>
+<script>
+var plano={valor:'3.00',tempo:60};
+function sel(id,v,t){document.querySelectorAll('.card').forEach(function(c){c.classList.remove('ativo')});document.getElementById(id).classList.add('ativo');plano={valor:v,tempo:t};}
+async function gerar(){
+  var area=document.getElementById('pixArea');
+  var btn=document.getElementById('btnGerar');
+  area.style.display='block';
+  btn.innerHTML='GERANDO...';
+  area.innerHTML='Gerando PIX R$ '+plano.valor+' ...';
+  try{
+    var r=await fetch('/criar-pix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:plano.valor,tempo:plano.tempo})});
+    var j=await r.json();
+    if(j.erro) throw new Error(j.erro);
+    area.innerHTML='<div style=color:#00a650;font-weight:900>PIX R$ '+plano.valor+' GERADO</div><img src="'+j.imagemQrcode+'"><br><textarea id=cp>'+j.copia_e_cola+'</textarea><br><button onclick=navigator.clipboard.writeText(document.getElementById("cp").value);alert("COPIADO") style="background:#00a650;color:#fff;width:100%;padding:12px;border:0;border-radius:10px;margin-top:8px;font-weight:900">COPIAR</button><div id=sMsg style=background:#FFEB3B;color:#000;padding:10px;border-radius:8px;margin-top:10px;font-weight:900>Aguardando pagamento...</div>';
+    btn.innerHTML='PIX GERADO!';
+    var tx=j.txid;
+    var intervalo = setInterval(async function(){
+      try{
+        var s=await fetch('/status/'+tx);
+        var js=await s.json();
+        if(js.status==='CONCLUIDA'){
+          clearInterval(intervalo);
+          var m=document.getElementById('sMsg');
+          if(m){m.innerHTML='<a href="#" onclick="liberar(\\''+tx+'\\');return false;" style="display:block;background:#00e676;color:#000;padding:15px;border-radius:10px;text-decoration:none;font-size:18px">✅ PAGO! CLIQUE PARA LIBERAR</a>';}
+        }
+      }catch(e){}
+    },4000);
+  }catch(e){
+    area.innerHTML='<div style=color:red>ERRO: '+e.message+'</div>';
+    btn.innerHTML='TENTAR NOVAMENTE';
+  }
 }
 async function liberar(txid){
   await fetch('/api/liberado/'+txid);
-  document.getElementById('pix').innerHTML = '<h1>✅ LIBERADO!</h1><p>Pode voltar para o WiFi e navegar.</p><a id="statusPaga" href="http://10.5.50.1/login">ENTRAR NA INTERNET</a>';
+  await fetch('/liberado/'+txid);
+  document.getElementById('pixArea').innerHTML='<h1 style=color:#00a650>✅ LIBERADO!</h1><p style=margin-top:10px;color:#000>Volte para o WiFi e navegue!</p><a href="http://10.5.50.1/login" style="display:block;background:#FFEB3B;color:#000;padding:18px;border-radius:12px;margin-top:15px;font-weight:900;text-decoration:none">ENTRAR NA INTERNET</a>';
 }
-</script>
-</body>
-</html>
-  `);
+</script></body></html>`);
 });
-
-app.post('/criar-pix', async (req, res) => {
-  try {
-    if (!fs.existsSync(CERT_PATH)) garanteCertificado();
-    const { nome, valor, tempo } = req.body;
-    const efipay = new EfiPay(efiOptions);
-    const body = {
-      calendario: { expiracao: 3600 },
-      devedor: { nome: nome || 'Cliente' },
-      valor: { original: valor.toString() },
-      chave: process.env.EFI_CHAVE_PIX,
-      infoAdicionais: [{ nome: 'Plano', valor: tempo+' min' }]
-    };
-    const cob = await efipay.pixCreateImmediateCharge([], body);
-    const qrcode = await efipay.pixGenerateQRCode({ id: cob.loc.id });
-    
-    fila[cob.txid] = { txid: cob.txid, valor, tempo, status: 'AGUARDANDO', criadoEm: new Date().toISOString() };
+app.post('/criar-pix',async(req,res)=>{
+  try{
+    if(!fs.existsSync(CERT_PATH)) garanteCertificado();
+    const efipay=new EfiPay(efiOptions);
+    const body={calendario:{expiracao:3600},valor:{original:req.body.valor.toString()},chave:process.env.EFI_CHAVE_PIX};
+    const cob=await efipay.pixCreateImmediateCharge([],body);
+    const qrcode=await efipay.pixGenerateQRCode({id:cob.loc.id});
+    fila.push({txid:cob.txid,tempo:req.body.tempo,valor:req.body.valor,status:'AGUARDANDO'});
     salvarFila();
-
-    res.json({ txid: cob.txid, imagem: qrcode.imagemQrcode, copia_e_cola: qrcode.qrcode });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ erro: err.message, stack: err });
+    res.json({txid:cob.txid,imagemQrcode:qrcode.imagemQrcode,copia_e_cola:qrcode.qrcode});
+  }catch(err){
+    console.log('ERRO PIX',err.message);
+    res.status(500).json({erro:err.message});
   }
 });
-
-app.get('/status/:txid', async (req, res) => {
-  try {
-    if (!fs.existsSync(CERT_PATH)) garanteCertificado();
-    const efipay = new EfiPay(efiOptions);
-    const consulta = await efipay.pixDetailCharge({ txid: req.params.txid });
-    
-    if (consulta.status === 'CONCLUIDA') {
-      if(fila[req.params.txid]){
-        fila[req.params.txid].status = 'PAGO';
-        fila[req.params.txid].pagoEm = new Date().toISOString();
-        salvarFila();
-      } else {
-        // Se reiniciou e não tem na fila, recria
-        fila[req.params.txid] = { txid: req.params.txid, status: 'PAGO', pagoEm: new Date().toISOString() };
-        salvarFila();
-      }
-      return res.json({ status: 'CONCLUIDA', txid: req.params.txid });
+app.get('/status/:txid',async(req,res)=>{
+  try{
+    const efipay=new EfiPay(efiOptions);
+    const c=await efipay.pixDetailCharge({txid:req.params.txid});
+    if(c.status==='CONCLUIDA'){
+      let it=fila.find(f=>f.txid===req.params.txid);
+      if(it){ it.status='PAGO_LIBERAR'; salvarFila(); }
     }
-    res.json(consulta);
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
+    res.json(c);
+  }catch(e){res.status(500).json({erro:e.message});}
 });
-
-// ===== ROTA DEFINITIVA QUE O MIKROTIK LÊ =====
-app.get('/api/liberacoes', async (req, res) => {
-  try {
-    carregarFila();
-    // Se tiver algo PAGO na fila local, já devolve (resolve seu bug do Render reiniciar? não, mas não quebra)
-    const pagasLocal = Object.values(fila).filter(f => f.status === 'PAGO');
-    if(pagasLocal.length > 0){
-      return res.json(pagasLocal);
-    }
-    
-    // Tenta buscar na Efí só se a fila local estiver vazia
-    try {
-      if (!fs.existsSync(CERT_PATH)) garanteCertificado();
-      const efipay = new EfiPay(efiOptions);
-      const agora = new Date();
-      const inicio = new Date(agora.getTime() - 3*60*60*1000);
-      const params = {
-        inicio: inicio.toISOString().substring(0,19) + 'Z',
-        fim: agora.toISOString().substring(0,19) + 'Z'
-      };
-      const lista = await efipay.pixListCharges(params);
-      const pagas = (lista.cobs || []).filter(c => c.status === 'CONCLUIDA');
-      if(pagas.length > 0){
-        const resultado = pagas.map(c => ({ txid: c.txid, valor: c.valor.original, status: 'PAGO' }));
-        return res.json(resultado);
-      }
-    } catch(eListar){
-      console.log("Listar Efí falhou, usando fila local:", eListar.message);
-    }
-
-    return res.json(pagasLocal); // vai ser [] se não tiver nada mesmo
-
-  } catch (err) {
-    res.json(Object.values(fila).filter(f => f.status === 'PAGO'));
-  }
-});
-
-app.get('/api/liberado/:txid', (req, res) => {
-  if(fila[req.params.txid]){
-    delete fila[req.params.txid];
-    salvarFila();
-  }
-  res.json({ ok: true, removido: req.params.txid });
-});
-
-app.get('/fila', (req, res) => res.json(fila));
-app.get('/debug-efi', (req,res)=>{
-  const vars = {
-    tem_CLIENT_ID: !!process.env.EFI_CLIENT_ID,
-    tem_SECRET: !!process.env.EFI_CLIENT_SECRET,
-    tem_CHAVE: !!process.env.EFI_CHAVE_PIX,
-    tem_CERT_BASE64: !!process.env.EFI_CERTIFICADO_BASE64,
-    tamanho_CERT_BASE64: process.env.EFI_CERTIFICADO_BASE64 ? process.env.EFI_CERTIFICADO_BASE64.length : 0,
-    cert_existe_no_tmp: fs.existsSync(CERT_PATH),
-    tamanho_cert_tmp: fs.existsSync(CERT_PATH) ? fs.statSync(CERT_PATH).size : 0,
-    sandbox_configurado: efiOptions.sandbox
-  };
-  res.json(vars);
-});
-app.listen(process.env.PORT || 3000, () => console.log('SLS WIFI v10 ONLINE PERSISTENTE'));
+app.get('/fila',(req,res)=>{res.json(fila.filter(f=>f.status==='PAGO_LIBERAR'));});
+app.get('/api/liberacoes',(req,res)=>{res.json(fila.filter(f=>f.status==='PAGO_LIBERAR'));});
+app.get('/liberado/:txid',(req,res)=>{fila=fila.filter(f=>f.txid!==req.params.txid); salvarFila(); res.json({ok:true});});
+app.get('/api/liberado/:txid',(req,res)=>{fila=fila.filter(f=>f.txid!==req.params.txid); salvarFila(); res.json({ok:true});});
+const PORT=process.env.PORT||3000;
+app.listen(PORT,()=>console.log('SLS v12 PERSISTENTE OK PORT',PORT));
