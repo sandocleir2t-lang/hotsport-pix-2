@@ -13,7 +13,8 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json()); app.use(express.urlencoded({extended:true}));
-
+app.get('/ping', (req,res)=> res.send('pong'));
+app.get('/', (req,res)=> res.send('SLS WIFI ON'));
 const PLANOS = {
   "1H": { valor: 3.00, tempo: 60, vel: "5 MEGA", nome: "1 HORA - 5 MEGA", desc: "Ideal para uso rapido", sub: "1h de acesso" },
   "2H": { valor: 5.00, tempo: 120, vel: "10 MEGA", nome: "2 HORAS - 10 MEGA", desc: "Mais vendido", sub: "2h de acesso", tag: "MAIS VENDIDO" },
