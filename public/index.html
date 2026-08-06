@@ -106,25 +106,32 @@ Error generating stack: `+u.message+`
   <script>(function(){function m(a){var h=a.getAttribute("href");if(!h)return;try{var u=new URL(h,document.baseURI);if((u.protocol==="http:"||u.protocol==="https:")&&u.host!==location.host){a.target="_blank";a.rel="noopener noreferrer";}}catch(e){}}function s(){document.querySelectorAll("a[href]").forEach(m);}if(document.readyState!=="loading"){s();}else{document.addEventListener("DOMContentLoaded",s);}document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(a){m(a);}},true);})();</script>
   
 <script>
-// BOTÃO COPIAR AUTOMÁTICO SLS
-setTimeout(()=>{
-  const observer = new MutationObserver(()=>{
-    const texto = document.body.innerText.match(/SLS-\d{4,}/);
-    if(texto &&!document.getElementById('btnCopiarSLS')){
-      const btn = document.createElement('button');
-      btn.id='btnCopiarSLS';
-      btn.innerHTML='📋 Copiar '+texto[0];
-      btn.style='position:fixed; bottom:20px; right:20px; background:#7c3aed; color:white; padding:14px 22px; border-radius:12px; border:none; font-weight:bold; z-index:9999; cursor:pointer; box-shadow:0 4px 15px rgba(0,0,0,0.3)';
-      btn.onclick=()=>{
-        navigator.clipboard.writeText(texto[0]);
-        btn.innerHTML='✅ Copiado '+texto[0];
-        setTimeout(()=>btn.innerHTML='📋 Copiar '+texto[0], 2000);
-      };
-      document.body.appendChild(btn);
-    }
-  });
-  observer.observe(document.body, {childList:true, subtree:true});
-}, 1000);
+ <!-- BOTAO COPIAR PIX CORRIGIDO - VERSAO FINAL -->
+<script>
+(function(){
+  function copiarPix() {
+    var el = document.querySelector('.break-all');
+    if(!el){ alert('Gera o PIX primeiro!'); return; }
+    var texto = el.innerText.trim();
+    if(!texto || texto.length < 20){ alert('Gera o PIX primeiro!'); return; }
+    navigator.clipboard.writeText(texto).then(function(){
+      var btn = document.getElementById('btnCopiarPixFlutuante');
+      if(btn){ btn.innerHTML = '✅ COPIADO!'; setTimeout(function(){ btn.innerHTML = '📋 COPIAR PIX'; }, 2000); }
+    });
+  }
+  function criarBotao(){
+    if(document.getElementById('btnCopiarPixFlutuante')) return;
+    var btn = document.createElement('button');
+    btn.id = 'btnCopiarPixFlutuante';
+    btn.innerHTML = '📋 COPIAR PIX';
+    btn.style = 'position:fixed; bottom:20px; right:20px; background:#7c3aed; color:white; padding:18px 26px; border-radius:14px; border:none; font-weight:800; z-index:99999; cursor:pointer; box-shadow:0 8px 20px rgba(124,58,237,0.5); font-size:15px; display:none;';
+    btn.onclick = copiarPix;
+    document.body.appendChild(btn);
+    setInterval(function(){
+      var el = document.querySelector('.break-all');
+      btn.style.display = (el && el.innerText.length > 20) ? 'block' : 'none';
+    }, 500);
+  }
+  document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', criarBotao) : criarBotao();
+})();
 </script>
-</body>
-</html>
