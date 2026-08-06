@@ -105,5 +105,26 @@ Error generating stack: `+u.message+`
 </script>
   <script>(function(){function m(a){var h=a.getAttribute("href");if(!h)return;try{var u=new URL(h,document.baseURI);if((u.protocol==="http:"||u.protocol==="https:")&&u.host!==location.host){a.target="_blank";a.rel="noopener noreferrer";}}catch(e){}}function s(){document.querySelectorAll("a[href]").forEach(m);}if(document.readyState!=="loading"){s();}else{document.addEventListener("DOMContentLoaded",s);}document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(a){m(a);}},true);})();</script>
   
+<script>
+// BOTÃO COPIAR AUTOMÁTICO SLS
+setTimeout(()=>{
+  const observer = new MutationObserver(()=>{
+    const texto = document.body.innerText.match(/SLS-\d{4,}/);
+    if(texto &&!document.getElementById('btnCopiarSLS')){
+      const btn = document.createElement('button');
+      btn.id='btnCopiarSLS';
+      btn.innerHTML='📋 Copiar '+texto[0];
+      btn.style='position:fixed; bottom:20px; right:20px; background:#7c3aed; color:white; padding:14px 22px; border-radius:12px; border:none; font-weight:bold; z-index:9999; cursor:pointer; box-shadow:0 4px 15px rgba(0,0,0,0.3)';
+      btn.onclick=()=>{
+        navigator.clipboard.writeText(texto[0]);
+        btn.innerHTML='✅ Copiado '+texto[0];
+        setTimeout(()=>btn.innerHTML='📋 Copiar '+texto[0], 2000);
+      };
+      document.body.appendChild(btn);
+    }
+  });
+  observer.observe(document.body, {childList:true, subtree:true});
+}, 1000);
+</script>
 </body>
 </html>
