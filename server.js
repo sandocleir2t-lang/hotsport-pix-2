@@ -158,47 +158,36 @@ app.get('/status/:txid', async (req, res) => {
 // ===== ROTA DEFINITIVA QUE O MIKROTIK LÊ =====
 app.get('/api/liberacoes', async (req, res) => {
   try {
-    if (!fs.existsSync(CERT_PATH)) garanteCertificado();
-    const efipay = new EfiPay(efiOptions);
-
-    // 1. Tenta listar direto na Efí as últimas 2 horas
-    const agora = new Date();
-    const inicio = new Date(agora.getTime() - 2*60*60*1000);
+    carregarFila();
+    // Se tiver algo PAGO na fila local, já devolve (resolve seu bug do Render reiniciar? não, mas não quebra)
+    const pagasLocal = Object.values(fila).filter(f => f.status === 'PAGO');
+    if(pagasLocal.length > 0){
+      return res.json(pagasLocal);
+    }
     
-    const params = {
-      inicio: inicio.toISOString().substring(0,19) + 'Z',
-      fim: agora.toISOString().substring(0,19) + 'Z'
-    };
-
-    let pagasEfí = [];
+    // Tenta buscar na Efí só se a fila local estiver vazia
     try {
+      if (!fs.existsSync(CERT_PATH)) garanteCertificado();
+      const efipay = new EfiPay(efiOptions);
+      const agora = new Date();
+      const inicio = new Date(agora.getTime() - 3*60*60*1000);
+      const params = {
+        inicio: inicio.toISOString().substring(0,19) + 'Z',
+        fim: agora.toISOString().substring(0,19) + 'Z'
+      };
       const lista = await efipay.pixListCharges(params);
-      pagasEfí = (lista.cobs || []).filter(c => c.status === 'CONCLUIDA');
-    } catch(e){
-      console.log("Falha ao listar na Efi, usando fila local", e.message);
+      const pagas = (lista.cobs || []).filter(c => c.status === 'CONCLUIDA');
+      if(pagas.length > 0){
+        const resultado = pagas.map(c => ({ txid: c.txid, valor: c.valor.original, status: 'PAGO' }));
+        return res.json(resultado);
+      }
+    } catch(eListar){
+      console.log("Listar Efí falhou, usando fila local:", eListar.message);
     }
 
-    // 2. Junta com a fila local PAGO
-    const pagasLocal = Object.values(fila).filter(f => f.status === 'PAGO');
-
-    // 3. Merge: evita duplicar
-    let mapa = {};
-    pagasLocal.forEach(p => mapa[p.txid] = p);
-    pagasEfí.forEach(c => {
-      if(!mapa[c.txid]){
-        mapa[c.txid] = { txid: c.txid, valor: c.valor.original, status: 'PAGO', fonte: 'EFI_DIRETO' };
-      }
-    });
-
-    // Salva o que achou na Efi direto na fila pra persistir
-    Object.values(mapa).forEach(m => { if(!fila[m.txid]) fila[m.txid] = m; });
-    salvarFila();
-
-    res.json(Object.values(mapa));
+    return res.json(pagasLocal); // vai ser [] se não tiver nada mesmo
 
   } catch (err) {
-    console.log("Erro /api/liberacoes", err.message);
-    // Fallback: retorna só fila local se Efí falhar
     res.json(Object.values(fila).filter(f => f.status === 'PAGO'));
   }
 });
