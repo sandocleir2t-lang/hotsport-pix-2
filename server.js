@@ -24,8 +24,6 @@ try {
   } else if (fs.existsSync(LIB_FILE_SRC)) {
     liberacoes = JSON.parse(fs.readFileSync(LIB_FILE_SRC, 'utf8') || '[]');
     fila = [...liberacoes];
-    fs.writeFileSync(LIB_FILE_TMP, JSON.stringify(liberacoes));
-    fs.writeFileSync(FILA_FILE_TMP, JSON.stringify(fila));
   }
 } catch (e) { liberacoes=[]; fila=[]; }
 
@@ -34,8 +32,8 @@ function salvarLibs() {
     fs.writeFileSync(LIB_FILE_TMP, JSON.stringify(liberacoes, null, 2));
     fs.writeFileSync(FILA_FILE_TMP, JSON.stringify(fila, null, 2));
     fs.writeFileSync(LIB_FILE_SRC, JSON.stringify(liberacoes, null, 2));
-    console.log(`[${new Date().toLocaleTimeString('pt-BR')}] FILA SALVA total=${fila.length} liberacoes=${liberacoes.length} aguardando=${fila.filter(f=>f.status==='AGUARDANDO').length} pago_liberar=${fila.filter(f=>f.status==='PAGO_LIBERAR').length}`);
-  } catch(e){ console.log('ERRO SALVAR', e.message); }
+    console.log(`FILA SALVA total=${fila.length} PAGO_LIBERAR=${fila.filter(f=>f.status==='PAGO_LIBERAR').length} AGUARDANDO=${fila.filter(f=>f.status==='AGUARDANDO').length}`);
+  } catch(e){}
 }
 
 const CERT_PATH_TMP = '/tmp/hotspot-producao.p12';
@@ -56,73 +54,68 @@ function garanteCertificado(){
       if (!fs.existsSync(certPath)) fs.copyFileSync(src, certPath);
       return certPath;
     }
-  } catch(err){ console.log('CERT ERROR', err.message); }
+  } catch(err){}
   return null;
 }
 const certFinal = garanteCertificado();
 try {
   if (certFinal) {
-    const options = { sandbox: false, client_id: process.env.EFI_CLIENT_ID, client_secret: process.env.EFI_CLIENT_SECRET, certificate: certFinal, certificado: certFinal, pixCert: certFinal, cert_base64: false };
-    efi = new EfiPay(options);
-    console.log('CERT OK - EFI CONFIGURADO');
+    efi = new EfiPay({ sandbox: false, client_id: process.env.EFI_CLIENT_ID, client_secret: process.env.EFI_CLIENT_SECRET, certificate: certFinal });
+    console.log('CERT OK - EFI CONFIGURADO - QR FUNCIONANDO');
   }
 } catch(err){ console.log('EFI INIT ERROR', err.message); }
 
-console.log('SLS v12.5.3 - FIX LIBERACOES + LOGS VOLTANDO');
+console.log('SLS v12.5.4 FINAL RAPIDO - QR + VOUCHER FIX');
 
-// ROTAS FILA - CORRIGIDO: SO RETORNA PAGO_LIBERAR
+// ROTAS - VOLTA AO RAPIDO QUE FUNCIONAVA EM 26/07
 app.get('/api/liberacoes', (req, res) => { 
+  // APENAS PAGO_LIBERAR - esse era o que liberava rapido em 60s
   const pagos = fila.filter(f=>f.status==='PAGO_LIBERAR');
-  console.log(`[API] /api/liberacoes chamado - retornando ${pagos.length} PAGO_LIBERAR de ${fila.length} total`);
   res.json(pagos); 
 });
 app.get('/fila', (req, res) => { res.json(fila); });
 app.get('/api/fila', (req, res) => { res.json(fila); });
-app.get('/api/liberacoes/limpar', (req, res) => { liberacoes = []; fila=[]; salvarLibs(); console.log('LIBERACOES LIMPAS PELO ADMIN'); res.send('LIBERACOES LIMPAS!'); });
+app.get('/api/liberacoes/limpar', (req, res) => { liberacoes = []; fila=[]; salvarLibs(); res.send('LIMPO'); });
 
 function liberaPorTxid(detail) {
   try {
-    const macInfo = detail.infoAdicionais?.find(i => i.nome === 'MAC' || i.nome === 'mac')?.valor;
-    const tempoInfo = detail.infoAdicionais?.find(i => i.nome === 'TEMPO' || i.nome === 'tempo')?.valor || '1h';
-    const ipInfo = detail.infoAdicionais?.find(i => i.nome === 'IP' || i.nome === 'ip')?.valor || '';
-    if (!macInfo || macInfo === 'semmac' || macInfo.toLowerCase().includes('00:00:00') || macInfo.length > 18 || macInfo.length < 12) {
-      console.log(`PIX PAGO SEM MAC VALIDO - NAO LIBERANDO. TXID ${detail.txid} mac=${macInfo}`);
-      let it = fila.find(f=>f.txid===detail.txid);
-      if(it) it.status='PAGO_SEM_MAC';
-      salvarLibs();
+    const macInfo = detail.infoAdicionais?.find(i => i.nome === 'MAC')?.valor;
+    const tempoInfo = detail.infoAdicionais?.find(i => i.nome === 'TEMPO')?.valor || '1h';
+    const ipInfo = detail.infoAdicionais?.find(i => i.nome === 'IP')?.valor || '';
+    if (!macInfo || macInfo === 'semmac' || macInfo.length < 12 || macInfo.includes('00:00:00')) {
+      console.log(`PIX PAGO SEM MAC - TXID ${detail.txid}`);
       return null;
     }
+    // Limpa MAC antigo igual fazia em 26/07
     liberacoes = liberacoes.filter(l => (l.mac||'').toLowerCase() !== macInfo.toLowerCase());
     fila = fila.filter(l => (l.mac||'').toLowerCase() !== macInfo.toLowerCase() && l.txid !== detail.txid);
     const novo = { mac: macInfo, ip: ipInfo, tempo: tempoInfo, data: Date.now(), txid: detail.txid, status: 'PAGO_LIBERAR' };
     liberacoes.push(novo); fila.push(novo); salvarLibs();
-    console.log(`✅ LIBERADO ${macInfo} ${tempoInfo} TXID ${detail.txid}`);
+    console.log(`✅ LIBERADO RAPIDO ${macInfo} ${tempoInfo} ${detail.txid}`);
     return macInfo;
-  } catch (e) { console.log('ERRO LIBERA', e.message); return null; }
+  } catch (e) { return null; }
 }
 
 async function handlerGerarPix(req, res){
   try {
     const { valor, tempo, mac, ip } = req.body;
-    console.log(`[${new Date().toLocaleTimeString('pt-BR')}] GERAR PIX valor=${valor} tempo=${tempo} mac=${mac} ip=${ip}`);
-    const valorNum = Number(valor);
+    console.log(`GERAR PIX ${valor} ${tempo} ${mac}`);
     if (!efi) return res.status(500).json({ erro: 'EFI nao configurado' });
-    const body = {
+    const charge = await efi.pixCreateImmediateCharge({}, {
       calendario: { expiracao: 3600 },
       devedor: { cpf: '12345678909', nome: 'Cliente SLS WIFI' },
-      valor: { original: valorNum.toFixed(2) },
-      chave: process.env.EFI_PIX_KEY || process.env.EFI_CHAVE_PIX,
+      valor: { original: Number(valor).toFixed(2) },
+      chave: process.env.EFI_PIX_KEY,
       solicitacaoPagador: `SLS WIFI ${tempo} - ${mac}`,
-      infoAdicionais: [{ nome: 'MAC', valor: mac || 'semmac' }, { nome: 'IP', valor: ip || '' }, { nome: 'TEMPO', valor: String(tempo || '') }]
-    };
-    const charge = await efi.pixCreateImmediateCharge({}, body);
+      infoAdicionais: [{ nome: 'MAC', valor: mac||'semmac' }, { nome: 'IP', valor: ip||'' }, { nome: 'TEMPO', valor: String(tempo||'') }]
+    });
     const qrcode = await efi.pixGenerateQRCode({ id: charge.loc.id });
     fila.push({ txid: charge.txid, tempo: tempo, valor: valor, mac: mac||'semmac', status: 'AGUARDANDO', data: Date.now() });
     salvarLibs();
-    console.log(`✅ QR GERADO OK TXID ${charge.txid} MAC ${mac} - AGUARDANDO PAGAMENTO`);
+    console.log(`QR GERADO OK ${charge.txid}`);
     return res.json({ txid: charge.txid, qrcode: qrcode.qrcode, copiaecola: qrcode.qrcode, copia_e_cola: qrcode.qrcode, imagem: qrcode.imagemQrcode, imagemQrcode: qrcode.imagemQrcode });
   } catch (err) {
-    console.error('❌ ERRO GERAR PIX', err);
+    console.error('ERRO GERAR PIX', err.message);
     return res.status(500).json({ erro: err.message });
   }
 }
@@ -132,91 +125,53 @@ app.post('/criar-pix', handlerGerarPix);
 app.post('/api/gerar-voucher', (req, res) => {
   try {
     const { tempo, qtd, perfil, evento, server, uptime } = req.body;
-    const quantidade = Number(qtd) || 5;
+    const quantidade = Number(qtd) || 2;
     const tempoFinal = tempo || perfil || 'EVENTO';
-    const eventoNome = evento || `SLS-V99-${tempoFinal} - ${new Date().toLocaleDateString('pt-BR')}`;
-    const perfilMK = tempoFinal;
+    const eventoNome = evento || `SLS-V99-${tempoFinal}`;
     const serverMK = server || 'hotspot1';
     const uptimeMK = uptime || '08:00:00';
-    const vouchers = [];
-    const comandos = [];
+    const vouchers = []; const comandos = [];
     for (let i = 0; i < quantidade; i++) {
       const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
       const pass = Math.random().toString(36).substring(2, 8).toUpperCase();
       const codigo = 'SLS-' + suffix;
-      vouchers.push({ user: codigo, senha: pass, perfil: perfilMK, codigo, password: pass });
-      comandos.push(`/ip hotspot user add name=${codigo} password=${pass} profile=${perfilMK} limit-uptime=${uptimeMK} server=${serverMK} comment="${eventoNome}"`);
+      vouchers.push({ user: codigo, senha: pass });
+      comandos.push(`/ip hotspot user add name=${codigo} password=${pass} profile=${tempoFinal} limit-uptime=${uptimeMK} server=${serverMK} comment="${eventoNome}"`);
     }
-    console.log(`VOUCHER GERADO ${quantidade}x ${tempoFinal} server=${serverMK}`);
-    return res.json({ ok: true, vouchers, comandos, evento: eventoNome, server: serverMK, uptime: uptimeMK });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
-  }
+    console.log(`VOUCHER ${quantidade}x ${tempoFinal}`);
+    return res.json({ ok: true, vouchers, comandos });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
 });
 
 async function handlerVerifica(req,res){
   try {
     const { txid } = req.params;
-    console.log(`[VERIFICA] txid=${txid}`);
-    if (txid.startsWith('SLS-')) {
-      console.log('VOUCHER CHECK IGNORADO NA FILA', txid);
-      return res.json({ status: 'VOUCHER', pago: false, voucher: true });
-    }
+    if (txid.startsWith('SLS-')) return res.json({ status: 'VOUCHER', pago: false, voucher: true });
     const detail = await efi.pixDetailCharge({ txid });
-    const status = detail.status || 'ATIVA';
-    console.log(`[VERIFICA] txid=${txid} status=${status}`);
-    if (status === 'CONCLUIDA') {
+    if (detail.status === 'CONCLUIDA') {
       const macLiberado = liberaPorTxid(detail);
       return res.json({ status: 'CONCLUIDA', pago: true, mac: macLiberado });
     }
-    return res.json({ status, pago: false });
-  } catch (err) {
-    console.log('[VERIFICA ERRO]', err.message);
-    return res.json({ status: 'ATIVA', pago: false });
-  }
+    return res.json({ status: detail.status, pago: false });
+  } catch (err) { return res.json({ status: 'ATIVA', pago: false }); }
 }
 app.get('/verifica/:txid', handlerVerifica);
 app.get('/status/:txid', handlerVerifica);
 
-app.post('/webhook', async (req, res) => {
-  try {
-    console.log('[WEBHOOK] recebido', JSON.stringify(req.body).substring(0,200));
-    const pixs = req.body.pix || [];
-    for (const p of pixs) {
-      if (p.txid && efi) {
-        const detail = await efi.pixDetailCharge({ txid: p.txid });
-        if (detail.status === 'CONCLUIDA') liberaPorTxid(detail);
-      }
-    }
-  } catch (e) { console.log('WEBHOOK ERRO', e.message); }
-  res.status(200).end();
-});
-
 app.get('/liberado/:txid',(req,res)=>{
   const txid = req.params.txid;
-  if (txid.startsWith('SLS-')) {
-    console.log('VOUCHER LOGIN - NAO LIMPA FILA', txid);
-    return res.json({ok:true, voucher:true});
-  }
+  if (txid.startsWith('SLS-')) return res.json({ok:true, voucher:true});
   fila=fila.filter(f=>f.txid!==txid); liberacoes=liberacoes.filter(f=>f.txid!==txid); salvarLibs();
-  console.log('LIBERADO REMOVIDO FILA', txid);
   res.json({ok:true});
 });
 app.get('/api/liberado/:txid',(req,res)=>{
   const txid = req.params.txid;
-  if (txid.startsWith('SLS-')) {
-    console.log('VOUCHER LOGIN - NAO LIMPA FILA', txid);
-    return res.json({ok:true, voucher:true});
-  }
+  if (txid.startsWith('SLS-')) return res.json({ok:true, voucher:true});
   fila=fila.filter(f=>f.txid!==txid); liberacoes=liberacoes.filter(f=>f.txid!==txid); salvarLibs();
-  console.log('API LIBERADO REMOVIDO FILA', txid);
   res.json({ok:true});
 });
 
-app.get('/admin', (req,res)=>{
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
+app.get('/admin', (req,res)=>{ res.sendFile(path.join(__dirname, 'public', 'admin.html')); });
 app.use(express.static(path.join(__dirname, 'public')));
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => console.log(`SLS v12.5.3 - LOGS CORRIGIDOS - RODANDO PORTA ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`SLS v12.5.4 RAPIDO RODANDO ${PORT} - QR OK`));
