@@ -1,119 +1,164 @@
-// SLS WIFI EVENTOS - hEX - index.js FINAL v13 - 07/08/2026
-// Corrige 404 /api/gerar-qrcode + CORS + MercadoPago
-const express = require('express');
-const cors = require('cors');
-const crypto = require('crypto');
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SLS WIFI EVENTOS</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Arial}
+body{background:#111;display:flex;justify-content:center;padding:10px}
+.box{width:100%;max-width:360px;background:#0d0d0d;border-radius:14px;overflow:hidden;border:1px solid #222}
+.top{padding:10px 12px;background:#0d0d0d}
+.online{font-size:10px;color:#00ff88;display:flex;align-items:center;gap:6px;letter-spacing:.5px}
+.online span{width:6px;height:6px;background:#00ff88;border-radius:50%;display:inline-block;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:0}}
+.logo{display:flex;align-items:center;gap:8px;margin-top:6px}
+.logo-icon{width:28px;height:28px;background:linear-gradient(45deg,#ff7a00,#ffb400);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:900;color:#000;font-size:16px}
+.logo b{font-size:20px;color:#fff;letter-spacing:.5px}.logo b span{color:#ff8c00}
+.sub{font-size:11px;color:#aaa;margin-top:2px}
+.warn{background:#ffd400;color:#000;font-size:11px;font-weight:700;text-align:center;padding:7px}
+.title-row{display:flex;justify-content:space-between;align-items:center;padding:12px 12px 6px}
+.title-row h3{font-size:13px;color:#fff}
+.badge{background:#2a2a6a;color:#8a8aff;font-size:9px;padding:4px 8px;border-radius:20px}
+.plan{margin:8px 12px;background:#181818;border:1.5px solid #2a2a2a;border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;position:relative}
+.plan.selected{border-color:#ffd400;background:#1f1d0f}
+.plan-left{display:flex;gap:8px;align-items:flex-start}
+.plan-left .ico{width:16px;height:16px;border:1.5px solid #555;border-radius:50%;margin-top:2px;display:flex;align-items:center;justify-content:center}
+.plan.selected .ico{border-color:#ffd400;background:#ffd400}
+.plan.selected .ico:after{content:'✓';font-size:10px;color:#000;font-weight:900}
+.plan-name{font-size:12px;font-weight:700;color:#fff}
+.plan-desc{font-size:10px;color:#777;margin-top:1px}
+.plan-right{text-align:right}
+.price{font-size:16px;font-weight:900;color:#ffd400}
+.time{font-size:9px;color:#777}
+.mais{position:absolute;top:-7px;right:10px;background:#ff0000;color:#fff;font-size:8px;font-weight:800;padding:2px 6px;border-radius:10px}
+.btn-gerar{margin:12px;background:#ffd400;color:#000;border:0;width:calc(100% - 24px);padding:14px;border-radius:10px;font-weight:900;font-size:13px;letter-spacing:.5px}
+#pixbox{display:none;padding:12px;text-align:center;background:#181818;margin:0 12px 12px;border-radius:10px;border:1px solid #333}
+#qrimg{width:200px;height:200px;background:#fff;padding:6px;border-radius:10px;margin:10px auto;display:none}
+#brcode{font-size:10px;word-break:break-all;background:#0f0f0f;padding:8px;border-radius:6px;border:1px dashed #444;color:#ccc;margin-top:8px}
+#pago{display:none;background:#00ff88;color:#000;padding:12px;border-radius:8px;font-weight:900;margin-top:10px}
+.voucher{padding:0 12px 12px}
+.voucher small{display:block;text-align:center;color:#777;font-size:10px;margin:8px 0}
+.voucher input{width:100%;background:#181818;border:1px solid #2a2a2a;color:#fff;padding:10px;border-radius:8px;margin-bottom:6px;font-size:12px;text-align:center}
+.btn-voucher{width:100%;background:#2a2a4a;color:#fff;border:0;padding:11px;border-radius:8px;font-weight:700;font-size:12px}
+.mac{font-size:8px;color:#333;text-align:center;padding:8px}
+</style>
+</head>
+<body>
+<div class="box">
+<div class="top">
+<div class="online"><span></span> ONLINE - 247 CLIENTES CONECTADOS</div>
+<div class="logo"><div class="logo-icon">📶</div><b>SLS<span>WIFI</span></b></div>
+<div class="sub">Internet rápida • Pagamento instantâneo via PIX</div>
+</div>
+<div class="warn">NÃO FECHE ESTA TELA ATÉ PAGAR!</div>
+<div class="title-row"><h3>ESCOLHA SEU PLANO</h3><div class="badge">⚡ Ativação imediata</div></div>
 
-const app = express();
-const PORT = process.env.PORT || 10000;
+<div id="planos">
+<div class="plan selected" data-plano="1H" data-valor="3" data-tempo="1 hora" onclick="sel(this)">
+<div class="plan-left"><div class="ico"></div><div><div class="plan-name">1 HORA - 5 MEGA</div><div class="plan-desc">Ideal para uso rápido</div></div></div>
+<div class="plan-right"><div class="price">R$ 3</div><div class="time">1h de acesso</div></div>
+</div>
+<div class="plan" data-plano="2H" data-valor="5" data-tempo="3 horas" onclick="sel(this)">
+<div class="mais">MAIS VENDIDO</div>
+<div class="plan-left"><div class="ico"></div><div><div class="plan-name">2 HORAS - 10 MEGA</div><div class="plan-desc">Mais vendido - 10 Mega</div></div></div>
+<div class="plan-right"><div class="price">R$ 5</div><div class="time">2h de acesso</div></div>
+</div>
+<div class="plan" data-plano="DIA" data-valor="12" data-tempo="8 horas" onclick="sel(this)">
+<div class="plan-left"><div class="ico">📅</div><div><div class="plan-name">EVENTO TODO - 15 MEGA</div><div class="plan-desc">Ultra rápida o dia todo</div></div></div>
+<div class="plan-right"><div class="price">R$ 12</div><div class="time">8h de acesso</div></div>
+</div>
+<button class="btn-gerar" onclick="gerar()">GERAR PIX - PAGAR AGORA</button>
+</div>
 
-app.use(cors({ origin: '*' }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+<div id="pixbox">
+<div id="planoinfo" style="font-weight:800;color:#ffd400;font-size:12px"></div>
+<img id="qrimg">
+<div id="brcode"></div>
+<button class="btn-gerar" style="margin:10px 0 0 0;width:100%" onclick="copiar()">COPIAR PIX COPIA E COLA</button>
+<p style="font-size:10px;color:#888;margin-top:8px">Aguardando pagamento... checando a cada 3s</p>
+<div id="pago">✅ PAGO!<br>NET LIBERADA<br><small style="font-size:11px">Pode navegar, liberação em 5s</small></div>
+</div>
 
-let FILA = []; // {txid, mac, valor, tempo, plano, brcode, qrcode, status, createdAt}
+<div class="voucher">
+<small>TEM VOUCHER?</small>
+<form name="login" action="$(link-login-only)" method="post">
+<input type="hidden" name="dst" value="$(link-orig)">
+<input type="hidden" name="popup" value="true">
+<input name="username" placeholder="CODIGO VOUCHER" required>
+<input type="password" name="password" placeholder="SENHA" value="">
+<button type="submit" class="btn-voucher">ENTRAR COM VOUCHER</button>
+</form>
+</div>
+<div class="mac">MAC: $(mac) | SLS hEX v13 FIX QR</div>
+</div>
 
-const MP_TOKEN = process.env.MP_ACCESS_TOKEN || process.env.MERCADOPAGO_ACCESS_TOKEN || '';
+<script>
+const API="https://hotsport-pix-2.onrender.com";
+let selected=document.querySelector('.plan.selected');
+let tx=null;
+let macAddr="$(mac)";
+if(macAddr.indexOf("$")!==-1 || macAddr.length<10) macAddr="BC:45:20:11:22:33";
+let userField=document.getElementsByName("username")[0];
+let passField=document.getElementsByName("password")[0];
+userField.addEventListener('input',()=>{ passField.value=userField.value; });
 
-function genTxid() { return 'SLS-' + crypto.randomBytes(4).toString('hex').toUpperCase(); }
+function sel(el){
+ document.querySelectorAll('.plan').forEach(p=>p.classList.remove('selected'));
+ el.classList.add('selected');
+ selected=el;
+}
 
-// ROTA QUE ESTAVA QUEBRADA - 404 CORRIGIDO
-app.post('/api/gerar-qrcode', async (req, res) => {
-  try {
-    const { mac, valor, tempo, plano } = req.body;
-    if (!mac) return res.status(400).json({ error: 'mac obrigatorio' });
+function gerar(){
+ if(!selected) return;
+ let plano=selected.dataset.plano;
+ let valor=selected.dataset.valor;
+ let tempo=selected.dataset.tempo;
+ document.getElementById('planos').style.display='none';
+ document.getElementById('pixbox').style.display='block';
+ document.getElementById('planoinfo').innerText=selected.querySelector('.plan-name').innerText+" - R$ "+valor;
+ fetch(API+"/api/gerar-qrcode",{
+   method:'POST',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({mac:macAddr, plano, valor, tempo})
+ })
+ .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+ .then(d=>{
+   tx=d.txid;
+   document.getElementById('brcode').innerText=d.brcode;
+   let img=document.getElementById('qrimg');
+   img.style.display='block';
+   if(d.qrcode && d.qrcode.length>50){
+     img.src=d.qrcode.startsWith('data')?d.qrcode:'data:image/png;base64,'+d.qrcode;
+   }else{
+     img.src='https://api.qrserver.com/v1/create-qr-code/?size=220x220&data='+encodeURIComponent(d.brcode);
+   }
+   checar();
+ })
+ .catch(e=>{
+   alert('Erro ao gerar PIX: '+e.message+'\nConfere se o index.js v13 está no ar');
+   document.getElementById('planos').style.display='block';
+   document.getElementById('pixbox').style.display='none';
+ });
+}
 
-    const txid = genTxid();
-    const valorFinal = Number(valor) || 5;
-    const tempoFinal = tempo || '1 hora';
-    const planoFinal = plano || 'SLS WIFI';
+function copiar(){
+ navigator.clipboard.writeText(document.getElementById('brcode').innerText);
+ alert('PIX copiado!');
+}
 
-    let brcode = '';
-    let qrcode_base64 = '';
-
-    if (MP_TOKEN) {
-      try {
-        const mpRes = await fetch('https://api.mercadopago.com/v1/payments', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${MP_TOKEN}`,
-            'Content-Type': 'application/json',
-            'X-Idempotency-Key': txid
-          },
-          body: JSON.stringify({
-            transaction_amount: valorFinal,
-            description: `${planoFinal} - ${mac}`,
-            payment_method_id: 'pix',
-            payer: { email: 'cliente@slswifi.com' },
-            external_reference: txid,
-            notification_url: `https://hotsport-pix-2.onrender.com/api/webhook`
-          })
-        });
-        const mpData = await mpRes.json();
-        if (mpData.point_of_interaction?.transaction_data) {
-          brcode = mpData.point_of_interaction.transaction_data.qr_code;
-          qrcode_base64 = mpData.point_of_interaction.transaction_data.qr_code_base64;
-        }
-      } catch (e) { console.log('MP erro, vai mock:', e.message); }
+function checar(){
+ let iv=setInterval(()=>{
+  if(!tx) return;
+  fetch(API+'/api/fila?txid='+tx).then(r=>r.json()).then(j=>{
+    if(j.status==='PAGO_LIBERAR'){
+      clearInterval(iv);
+      document.getElementById('pago').style.display='block';
+      setTimeout(()=>{ location.href="$(link-orig)"; },2000);
     }
-
-    if (!brcode) {
-      brcode = `00020126580014BR.GOV.BCB.PIX0136${txid}0215SLS WIFI EVENTOS520400005303986540${valorFinal.toFixed(2)}5802BR5920SLS WIFI EVENTOS6009TERESINA62070503***6304ABCD`;
-    }
-
-    const item = { txid, mac: mac.toUpperCase(), valor: valorFinal, tempo: tempoFinal, plano: planoFinal, brcode, qrcode: qrcode_base64, status: 'PENDENTE', createdAt: Date.now() };
-    FILA.push(item);
-    setTimeout(() => { FILA = FILA.filter(f => f.txid !== txid); }, 15 * 60 * 1000);
-
-    return res.json({ txid, qrcode: qrcode_base64, brcode, valor: valorFinal, tempo: tempoFinal, plano: planoFinal });
-  } catch (err) {
-    res.status(500).json({ error: 'failed', details: err.message });
-  }
-});
-
-app.get('/api/fila', (req, res) => {
-  const { txid, mac } = req.query;
-  if (txid) return res.json(FILA.find(f => f.txid === txid) || { status: 'NAO_ENCONTRADO' });
-  if (mac) return res.json(FILA.filter(f => f.mac === mac.toUpperCase()));
-  res.json(FILA);
-});
-
-app.get('/api/status/:txid', (req, res) => {
-  res.json(FILA.find(f => f.txid === req.params.txid) || { status: 'NAO_ENCONTRADO' });
-});
-
-app.get('/api/liberacoes', (req, res) => {
-  res.json(FILA.filter(f => f.status === 'PAGO_LIBERAR'));
-});
-
-app.get('/api/liberacoes/limpar', (req, res) => {
-  const { txid } = req.query;
-  if (txid) FILA = FILA.filter(f => f.txid !== txid);
-  else FILA = FILA.filter(f => f.status !== 'PAGO_LIBERAR');
-  res.send('LIMPO');
-});
-
-app.post('/api/webhook', async (req, res) => {
-  try {
-    const paymentId = req.body?.data?.id || req.query.id;
-    if (!paymentId || !MP_TOKEN) return res.sendStatus(200);
-    const r = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, { headers: { 'Authorization': `Bearer ${MP_TOKEN}` } });
-    const pay = await r.json();
-    if (pay.status === 'approved') {
-      const item = FILA.find(f => f.txid === pay.external_reference);
-      if (item) item.status = 'PAGO_LIBERAR';
-    }
-    res.sendStatus(200);
-  } catch { res.sendStatus(200); }
-});
-
-// TESTE SEM PAGAR: https://hotsport-pix-2.onrender.com/api/pagar/SLS-XXXX
-app.get('/api/pagar/:txid', (req, res) => {
-  const item = FILA.find(f => f.txid === req.params.txid);
-  if (item) { item.status = 'PAGO_LIBERAR'; return res.json({ ok: true, item }); }
-  res.status(404).json({ error: 'nao encontrado' });
-});
-
-app.get('/', (req, res) => res.send('SLS WIFI EVENTOS API ONLINE v13 - QR FIX'));
-
-app.listen(PORT, () => console.log('Rodando ' + PORT));
+  });
+ },3000);
+}
+</script>
+</body>
+</html>
