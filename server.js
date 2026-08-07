@@ -66,7 +66,7 @@ async function coreGerar(req,res){
     try{
       const efi=await getEfi();
       if(efi){
-        console.log('[EFI] Gerando real', txid, valor);
+        console.log(`[EFI] Gerando real TXID=${txid} VALOR=${valor} MAC=${mac} IP=${ip} PLANO=${plano}`);
         const body={ calendario:{expiracao:3600}, valor:{original:valor.toFixed(2)}, chave:process.env.EFI_PIX_KEY, solicitacaoPagador:`SLS ${plano}`.slice(0,25) };
         const charge=await efi.pixCreateImmediateCharge([], body);
         const qr=await efi.pixGenerateQRCode({ id: charge.loc.id });
@@ -79,6 +79,7 @@ async function coreGerar(req,res){
 
     const item={ txid, mac, ip, valor, tempo, plano, brcode, qrcode:brcode, copiaecola:brcode, pixCopiaECola:brcode, status:'PENDENTE', createdAt:Date.now() };
     FILA.push(item);
+    console.log(`[FILA] Novo - TXID=${txid} MAC=${mac} IP=${ip} R$${valor} - Total fila: ${FILA.length}`);
     setTimeout(()=>{ FILA=FILA.filter(f=>f.txid!==txid); }, 15*60*1000);
 
     // Retorno compatível com TUDO: front amarelo novo e antigo
