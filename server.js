@@ -1,3 +1,4 @@
+// server.js v12.5.8 FIX DEFINITIVO - BASEADO NO SEU 12.5.4 QUE GERA QR
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -27,12 +28,15 @@ try {
   }
 } catch (e) { liberacoes=[]; fila=[]; }
 
+// FIX 1: LOG SEM FLOODAR - SO LOGA SE TIVER FILA
 function salvarLibs() {
   try {
     fs.writeFileSync(LIB_FILE_TMP, JSON.stringify(liberacoes, null, 2));
     fs.writeFileSync(FILA_FILE_TMP, JSON.stringify(fila, null, 2));
     fs.writeFileSync(LIB_FILE_SRC, JSON.stringify(liberacoes, null, 2));
-    console.log(`FILA SALVA total=${fila.length} PAGO_LIBERAR=${fila.filter(f=>f.status==='PAGO_LIBERAR').length} AGUARDANDO=${fila.filter(f=>f.status==='AGUARDANDO').length}`);
+    if(fila.length > 0){
+      console.log(`FILA SALVA total=${fila.length} PAGO_LIBERAR=${fila.filter(f=>f.status==='PAGO_LIBERAR').length} AGUARDANDO=${fila.filter(f=>f.status==='AGUARDANDO').length}`);
+    }
   } catch(e){}
 }
 
@@ -65,21 +69,20 @@ try {
   }
 } catch(err){ console.log('EFI INIT ERROR', err.message); }
 
-console.log('SLS v12.5.4 FINAL RAPIDO - QR + VOUCHER FIX - ORIGINAL QUE FUNCIONAVA');
+console.log('SLS v12.5.8 FIX DEFINITIVO - QR + COPIA E COLA + SCHEDULER 5s');
 
-// ROTAS ORIGINAIS QUE FUNCIONAVAM
 app.get('/api/liberacoes', (req, res) => { 
   const pagos = fila.filter(f=>f.status==='PAGO_LIBERAR');
   res.json(pagos); 
 });
-app.get('/fila', (req, res) => { res.json(fila); });
+app.get('/fila', (req, res) => { res.json(fila.filter(f=>f.status==='PAGO_LIBERAR')); });
 app.get('/api/fila', (req, res) => { 
   const { txid } = req.query;
   if (txid) {
     const item = fila.find(f=>f.txid===txid);
     return res.json(item || {status:'NAO_ENCONTRADO'});
   }
-  res.json(fila); 
+  res.json(fila.filter(f=>f.status==='PAGO_LIBERAR')); 
 });
 app.get('/api/liberacoes/limpar', (req, res) => { liberacoes = []; fila=[]; salvarLibs(); res.send('LIMPO'); });
 
@@ -90,6 +93,9 @@ function liberaPorTxid(detail) {
     const ipInfo = detail.infoAdicionais?.find(i => i.nome === 'IP')?.valor || '';
     if (!macInfo || macInfo === 'semmac' || macInfo.length < 12 || macInfo.includes('00:00:00')) {
       console.log(`PIX PAGO SEM MAC - TXID ${detail.txid}`);
+      // Libera mesmo sem MAC pra fila não travar
+      const item = fila.find(f=>f.txid===detail.txid);
+      if(item){ item.status='PAGO_LIBERAR'; salvarLibs(); }
       return null;
     }
     liberacoes = liberacoes.filter(l => (l.mac||'').toLowerCase() !== macInfo.toLowerCase());
@@ -103,7 +109,6 @@ function liberaPorTxid(detail) {
 
 async function handlerGerarPix(req, res){
   try {
-    // ACEITA BODY OU QUERY - COMPATIVEL COM TUDO
     const valor = req.body?.valor || req.query?.valor || 3;
     const tempo = req.body?.tempo || req.query?.tempo || '1h';
     const mac = req.body?.mac || req.query?.mac || 'semmac';
@@ -123,32 +128,31 @@ async function handlerGerarPix(req, res){
       infoAdicionais: [{ nome: 'MAC', valor: (mac||'semmac').substring(0,30) }, { nome: 'IP', valor: (ip||'192.168.88.1').substring(0,30) }, { nome: 'TEMPO', valor: String(tempo||'1h').substring(0,30) }]
     });
     const qrcode = await efi.pixGenerateQRCode({ id: charge.loc.id });
-    fila.push({ txid: charge.txid, tempo: tempo, valor: valor, mac: mac||'semmac', status: 'AGUARDANDO', data: Date.now(), plano });
+    fila.push({ txid: charge.txid, tempo: tempo, valor: valor, mac: mac||'semmac', ip: ip, status: 'AGUARDANDO', data: Date.now(), plano });
     salvarLibs();
     console.log(`QR GERADO OK ${charge.txid}`);
 
-    // RETORNO QUE SEU LAYOUT AMARELO ENTENDE
+    // FIX 2: COPIA E COLA - RETORNA TODOS OS NOMES QUE O AMARELO PROCURA
     return res.json({ 
       txid: charge.txid, 
       qrcode: qrcode.imagemQrcode, 
       brcode: qrcode.qrcode,
       copiaecola: qrcode.qrcode, 
-      copia_e_cola: qrcode.qrcode, 
+      copia_e_cola: qrcode.qrcode,
+      pixCopiaECola: qrcode.qrcode,
+      copiaCola: qrcode.qrcode,
       imagem: qrcode.imagemQrcode, 
       imagemQrcode: qrcode.imagemQrcode,
       valor, tempo, plano
     });
   } catch (err) {
     console.error('ERRO GERAR PIX', err);
-    console.error(JSON.stringify(err, null, 2));
     return res.status(500).json({ erro: err.message || 'erro EFI', detalhe: err });
   }
 }
 
-// ROTAS ORIGINAIS
 app.post('/gerar', handlerGerarPix);
 app.post('/criar-pix', handlerGerarPix);
-// NOVAS ROTAS - APENAS ALIAS PARA O AMARELO FUNCIONAR - FIM DO 404
 app.post('/api/gerar-qrcode', handlerGerarPix);
 app.get('/api/gerar-qrcode', handlerGerarPix);
 app.all('/api/gerar-qrcode', handlerGerarPix);
@@ -169,7 +173,6 @@ app.post('/api/gerar-voucher', (req, res) => {
       vouchers.push({ user: codigo, senha: pass });
       comandos.push(`/ip hotspot user add name=${codigo} password=${pass} profile=${tempoFinal} limit-uptime=${uptimeMK} server=${serverMK} comment="${eventoNome}"`);
     }
-    console.log(`VOUCHER ${quantidade}x ${tempoFinal}`);
     return res.json({ ok: true, vouchers, comandos });
   } catch (e) { return res.status(500).json({ error: e.message }); }
 });
@@ -178,13 +181,21 @@ async function handlerVerifica(req,res){
   try {
     const { txid } = req.params;
     if (txid.startsWith('SLS-')) return res.json({ status: 'VOUCHER', pago: false, voucher: true });
+    // Se já tá na fila como PAGO_LIBERAR, já retorna pago
+    const naFila = fila.find(f=>f.txid===txid);
+    if(naFila && naFila.status==='PAGO_LIBERAR') return res.json({ status: 'CONCLUIDA', pago: true, mac: naFila.mac });
+
     const detail = await efi.pixDetailCharge({ txid });
     if (detail.status === 'CONCLUIDA') {
       const macLiberado = liberaPorTxid(detail);
       return res.json({ status: 'CONCLUIDA', pago: true, mac: macLiberado });
     }
     return res.json({ status: detail.status, pago: false });
-  } catch (err) { return res.json({ status: 'ATIVA', pago: false }); }
+  } catch (err) { 
+    const naFila = fila.find(f=>f.txid===req.params.txid);
+    if(naFila && naFila.status==='PAGO_LIBERAR') return res.json({ status: 'CONCLUIDA', pago: true });
+    return res.json({ status: 'ATIVA', pago: false }); 
+  }
 }
 app.get('/verifica/:txid', handlerVerifica);
 app.get('/status/:txid', handlerVerifica);
@@ -192,13 +203,13 @@ app.get('/api/verifica/:txid', handlerVerifica);
 app.get('/api/status/:txid', (req,res)=>{
   const it=fila.find(f=>f.txid===req.params.txid);
   if(!it) return res.json({status:'NAO_ENCONTRADO'});
-  return res.json(it);
+  return res.json({ status: it.status, pago: it.status==='PAGO_LIBERAR' });
 });
 
 app.get('/api/pagar/:txid', (req,res)=>{
   const it=fila.find(f=>f.txid===req.params.txid);
   if(it){
-    liberaPorTxid({txid:it.txid, infoAdicionais:[{nome:'MAC',valor:it.mac},{nome:'TEMPO',valor:it.tempo}]});
+    liberaPorTxid({txid:it.txid, infoAdicionais:[{nome:'MAC',valor:it.mac},{nome:'TEMPO',valor:it.tempo},{nome:'IP',valor:it.ip}]});
     return res.json({ok:true, status:'PAGO_LIBERAR'});
   }
   res.status(404).json({error:'nao achou'});
@@ -217,7 +228,21 @@ app.get('/api/liberado/:txid',(req,res)=>{
   res.json({ok:true});
 });
 
+// FIX 3: SCHEDULER 5s - LIBERA SOZINHO MESMO SE CLIENTE FECHAR TELA AMARELA
+setInterval(async ()=>{
+  const pendentes = fila.filter(f=>f.status==='AGUARDANDO');
+  if(pendentes.length===0 || !efi) return;
+  for(const item of pendentes){
+    try{
+      const detail = await efi.pixDetailCharge({ txid: item.txid });
+      if(detail.status==='CONCLUIDA'){
+        liberaPorTxid(detail);
+      }
+    }catch(e){}
+  }
+}, 5000);
+
 app.get('/admin', (req,res)=>{ res.sendFile(path.join(__dirname, 'public', 'admin.html')); });
 app.use(express.static(path.join(__dirname, 'public')));
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => console.log(`SLS v12.5.4 RAPIDO RODANDO ${PORT} - QR OK - COM /api/gerar-qrcode`));
+const PORTA = process.env.PORT || 10000;
+app.listen(PORTA, '0.0.0.0', () => console.log(`SLS v12.5.8 FIX DEFINITIVO RODANDO ${PORTA}`));
