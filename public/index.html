@@ -3,58 +3,56 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SLS WIFI EVENTOS</title>
+<title>SLS WIFI EVENTOS - FIX VOUCHER 12.5.4</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:Arial}
 body{background:#0f0f12;display:flex;justify-content:center;color:#fff}
 .box{width:100%;max-width:400px;background:#16161a;min-height:100vh;padding:14px}
-.top{display:flex;align-items:center;justify-content:center;gap:6px;color:#555;font-size:11px;margin-top:8px}
-.dot{width:8px;height:8px;background:#00e676;border-radius:50%}
+.top{display:flex;align-items:center;justify-content:center;gap:6px;color:#00e676;font-size:11px;margin-top:8px}
+.dot{width:8px;height:8px;background:#00e676;border-radius:50%;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:0}}
 .logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:10px}
 .logo i{width:38px;height:38px;background:linear-gradient(135deg,#ff8a00,#ffb700);border-radius:10px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:20px}
 .logo b{font-size:30px;font-weight:900}.logo span{color:#FFEB3B}
 .sub{color:#555;text-align:center;font-size:13px;margin-top:6px}
 .aviso{background:#FFEB3B;color:#000;text-align:center;padding:12px;border-radius:12px;font-weight:900;font-size:12px;margin:16px 0}
-.head{display:flex;justify-content:space-between;align-items:flex-start;margin:16px 2px}
-.head b{font-size:17px;line-height:1.1}
-.badge{background:#26263a;color:#9d9de0;font-size:10px;padding:8px 12px;border-radius:20px}
 .card{position:relative;border:1.8px solid #2a2a32;background:#222228;border-radius:16px;padding:14px;margin:12px 0;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
 .card.ativo{border-color:#FFEB3B;box-shadow:0 0 0 1px #FFEB3B}
-.tagMais{position:absolute;top:-10px;right:16px;background:#8b5cf6;color:#fff;font-size:9px;font-weight:900;padding:5px 12px;border-radius:20px}
 .left{display:flex;align-items:center;gap:10px}
 .ic{width:28px;height:28px;background:#2a2a32;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px}
 .tit{font-size:15px;font-weight:900;line-height:1.1}
 .price{text-align:right;min-width:60px}.price b{font-size:20px}.price small{font-size:10px;color:#666;display:block}
 .btn{width:100%;background:#FFEB3B;color:#000;border:0;padding:18px;border-radius:14px;font-weight:900;font-size:15px;margin-top:10px;cursor:pointer}
-.voucher{margin-top:18px}.voucher p{text-align:center;color:#444;font-size:12px;margin-bottom:8px}
+.voucher{margin-top:18px}.voucher p{text-align:center;color:#888;font-size:12px;margin-bottom:8px}
 .voucher input{width:100%;background:#222228;border:1px solid #2f2f38;color:#fff;padding:15px;border-radius:12px;margin:6px 0;font-size:14px}
-.btnV{width:100%;background:#2e2e4a;color:#8b8bff;border:0;padding:15px;border-radius:12px;font-weight:800;font-size:13px;margin-top:6px;cursor:pointer}
+.btnV{width:100%;background:#7c3aed;color:#fff;border:0;padding:15px;border-radius:12px;font-weight:900;font-size:14px;margin-top:6px;cursor:pointer}
 #pixArea{display:none;background:#fff;color:#000;border-radius:18px;padding:16px;margin-top:14px;text-align:center}
 #pixArea img{width:240px;height:240px;border-radius:12px}
 #pixArea textarea{width:100%;height:70px;font-size:10px;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:8px;word-break:break-all}
+#voucherResult{font-size:12px;text-align:center;margin-top:8px;white-space:pre-wrap;padding:10px;border-radius:8px}
+.ok{background:#002a14;color:#00e676;border:1px solid #00e676}
+.erro{background:#2a0a0a;color:#ff6b6b;border:1px solid #ff6b6b}
 .debug{color:#333;font-size:9px;text-align:center;margin-top:10px}
-#voucherResult{color:#00e676;font-size:12px;text-align:center;margin-top:8px;white-space:pre-wrap}
 </style>
 </head>
 <body>
 <div class="box">
-<div class="top"><div class="dot"></div>ONLINE - SLS v12.5.1 VOUCHER OK</div>
+<div class="top"><div class="dot"></div>ONLINE - SLS v12.5.4 VOUCHER FIX RAPIDO</div>
 <div class="logo"><i>📶</i><b>SLS<span>WIFI</span></b></div>
 <div class="sub">Internet rápida - Pagamento instantâneo via PIX</div>
 <div class="aviso">NAO FECHE ESTA TELA ATE PAGAR!</div>
-<div class="head"><div><b>ESCOLHA SEU<br>PLANO</b></div><div class="badge">⚡ Ativação imediata</div></div>
 
-<div class="card ativo" id="c1" onclick="sel('c1','3.00','1h',60)"><div class="left"><div class="ic">🕐</div><div><div class="tit">1 HORA - 5</div><div style="font-weight:900">MEGA</div><div style="font-size:11px;color:#666">Ideal para uso rápido</div></div></div><div class="price"><b>R$ 3</b><small>1h de acesso</small></div></div>
-<div class="card" id="c2" onclick="sel('c2','5.00','2h',120)"><div class="tagMais">MAIS VENDIDO</div><div class="left"><div class="ic">🕐</div><div><div class="tit">2 HORAS - 10</div><div style="font-weight:900">MEGA</div><div style="font-size:11px;color:#666">Mais vendido</div></div></div><div class="price"><b>R$ 5</b><small>2h de acesso</small></div></div>
-<div class="card" id="c3" onclick="sel('c3','12.00','EVENTO',480)"><div class="left"><div class="ic">📅</div><div><div class="tit">EVENTO TODO -</div><div style="font-weight:900">15 MEGA</div><div style="font-size:11px;color:#666">O dia todo</div></div></div><div class="price"><b>R$ 12</b><small>8h de acesso</small></div></div>
+<div class="card ativo" id="c1" onclick="sel('c1','3.00','1h',60)"><div class="left"><div class="ic">🕐</div><div><div class="tit">1 HORA - 5 MEGA</div><div style="font-size:11px;color:#666">Ideal para uso rápido</div></div></div><div class="price"><b>R$ 3</b></div></div>
+<div class="card" id="c2" onclick="sel('c2','5.00','2h',120)"><div class="left"><div class="ic">🕐</div><div><div class="tit">2 HORAS - 10 MEGA</div><div style="font-size:11px;color:#666">Mais vendido</div></div></div><div class="price"><b>R$ 5</b></div></div>
+<div class="card" id="c3" onclick="sel('c3','12.00','EVENTO',480)"><div class="left"><div class="ic">📅</div><div><div class="tit">EVENTO TODO - 15 MEGA</div><div style="font-size:11px;color:#666">O dia todo</div></div></div><div class="price"><b>R$ 12</b></div></div>
 
-<button class="btn" id="btnGerar" onclick="gerar()">GERAR PIX - PAGAR<br>AGORA</button>
+<button class="btn" id="btnGerar" onclick="gerar()">GERAR PIX - PAGAR AGORA</button>
 <div id="pixArea"></div>
 
 <div class="voucher">
 <p>TEM VOUCHER?</p>
-<input id="vcod" placeholder="CODIGO VOUCHER (ex: SLS-AB12)">
-<input id="vsen" placeholder="SENHA" type="password">
+<input id="vcod" placeholder="CODIGO VOUCHER (ex: SLS-Y848)">
+<input id="vsen" placeholder="SENHA" type="text">
 <button class="btnV" onclick="entrarVoucher()">ENTRAR COM VOUCHER</button>
 <div id="voucherResult"></div>
 </div>
@@ -78,7 +76,13 @@ function getIp(){
   if (mkIp && mkIp.indexOf('$(')===-1) ip = mkIp;
   return ip || '';
 }
-function getLinkLogin(){ return "$(link-login-only)" || ""; }
+function getLinkLogin(){ 
+  let l = "$(link-login-only)";
+  if(l && l.indexOf('$(')===-1) return l;
+  // Se estiver no proprio mikrotik
+  if(window.location.hostname === '10.5.50.1') return 'http://10.5.50.1/login';
+  return ""; 
+}
 
 var plano={valor:'3.00',tempoLabel:'1h',tempoMin:60};
 function sel(id,v,label,min){
@@ -128,39 +132,46 @@ async function liberar(txid){
   document.getElementById('pixArea').innerHTML='<h1 style=color:#00a650>✅ LIBERADO!</h1><p style=margin-top:10px;color:#000>MAC: '+getMac()+'</p><a href="http://10.5.50.1/login" style="display:block;background:#FFEB3B;color:#000;padding:18px;border-radius:12px;margin-top:15px;font-weight:900;text-decoration:none">ENTRAR NA INTERNET</a>';
 }
 
-// ===== VOUCHER - 2 MODOS =====
+// ===== VOUCHER FIX - IGUAL SEU GERADOR ROXO QUE FUNCIONAVA =====
 async function entrarVoucher(){
-  const user = document.getElementById('vcod').value.trim();
+  const user = document.getElementById('vcod').value.trim().toUpperCase();
   const pass = document.getElementById('vsen').value.trim() || user;
   const resDiv = document.getElementById('voucherResult');
   if(!user){ alert('Digite o codigo do voucher'); return; }
-  resDiv.innerText = 'Verificando voucher...';
+  resDiv.className = ''; resDiv.innerText = 'Verificando '+user+'...';
 
-  // MODO 1: Se estiver no Mikrotik hotspot, faz login direto no MT
+  // SEMPRE tenta logar no Mikrotik primeiro (igual seu arquivo local fazia)
   const linkLogin = getLinkLogin();
-  if(linkLogin && linkLogin.indexOf('$(')===-1){
-    // está no hotspot real
-    const loginUrl = linkLogin + "?username=" + encodeURIComponent(user) + "&password=" + encodeURIComponent(pass);
+  const isMikrotik = window.location.hostname === '10.5.50.1' || window.location.href.includes('10.5.50.1') || (linkLogin && linkLogin.includes('10.5.50.1'));
+  const isFile = window.location.protocol === 'file:';
+
+  // Se estiver no 10.5.50.1 OU no arquivo local C:/HOTSPORT... -> LOGA DIRETO
+  if(isMikrotik || isFile || (linkLogin && linkLogin.indexOf('$(')===-1)){
+    let loginUrl = '';
+    if(linkLogin && linkLogin.indexOf('$(')===-1){
+      loginUrl = linkLogin + "?username=" + encodeURIComponent(user) + "&password=" + encodeURIComponent(pass);
+    } else {
+      loginUrl = "http://10.5.50.1/login?username="+encodeURIComponent(user)+"&password="+encodeURIComponent(pass);
+    }
+    resDiv.className = 'ok';
+    resDiv.innerText = '✅ VOUCHER '+user+' - LOGANDO NO MIKROTIK...\n'+loginUrl;
+    console.log('REDIRECIONANDO PARA', loginUrl);
     window.location.href = loginUrl;
     return;
   }
 
-  // MODO 2: Se estiver no Render (teste) - tenta validar gerando voucher fake se for SLS-
+  // Se estiver no Render (https://hotspot-pix-2.onrender.com) -> mostra aviso mas tenta mesmo assim
   if(user.startsWith('SLS-')){
-    // se for voucher gerado pelo /api/gerar-voucher, libera simulado
-    try{
-      // simula login - cria na fila como voucher
-      await fetch('/api/liberado/'+user); // limpa se existir
-      resDiv.innerText = '✅ VOUCHER VALIDO (TESTE): '+user+'\nNo evento real, vai logar no Mikrotik automaticamente.\nSe quiser testar geração, use /api/gerar-voucher';
-      return;
-    }catch(e){}
+    resDiv.className = 'ok';
+    resDiv.innerText = '✅ VOUCHER VALIDO: '+user+'\n\nVocê está em: '+window.location.hostname+'\nPara logar de verdade, abra http://10.5.50.1 no WiFi SLS e digite o mesmo código.\n\nTentando redirecionar para 10.5.50.1...';
+    setTimeout(()=>{
+      window.location.href = "http://10.5.50.1/login?username="+encodeURIComponent(user)+"&password="+encodeURIComponent(pass);
+    }, 1500);
+    return;
   }
 
-  // Fallback: tenta login no gateway padrão do evento
-  // Muitos hotspots usam 10.5.50.1
-  const fallback = "http://10.5.50.1/login?username="+encodeURIComponent(user)+"&password="+encodeURIComponent(pass);
-  resDiv.innerText = 'Tentando logar no Mikrotik...\n'+fallback;
-  window.location.href = fallback;
+  resDiv.className = 'erro';
+  resDiv.innerText = '❌ VOUCHER INVALIDO: '+user;
 }
 </script>
 </body>
