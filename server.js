@@ -34,7 +34,7 @@ function salvarLibs() {
     fs.writeFileSync(LIB_FILE_TMP, JSON.stringify(liberacoes, null, 2));
     fs.writeFileSync(FILA_FILE_TMP, JSON.stringify(fila, null, 2));
     fs.writeFileSync(LIB_FILE_SRC, JSON.stringify(liberacoes, null, 2));
-    console.log('FILA SALVA', fila.length, 'LIBERACOES', liberacoes.length);
+    console.log(`[${new Date().toLocaleTimeString('pt-BR')}] FILA SALVA total=${fila.length} liberacoes=${liberacoes.length} aguardando=${fila.filter(f=>f.status==='AGUARDANDO').length} pago_liberar=${fila.filter(f=>f.status==='PAGO_LIBERAR').length}`);
   } catch(e){ console.log('ERRO SALVAR', e.message); }
 }
 
@@ -68,13 +68,17 @@ try {
   }
 } catch(err){ console.log('EFI INIT ERROR', err.message); }
 
-console.log('SLS v12.5.2 - ADMIN VOUCHER + FIX');
+console.log('SLS v12.5.3 - FIX LIBERACOES + LOGS VOLTANDO');
 
-// ROTAS FILA
-app.get('/api/liberacoes', (req, res) => { res.json(fila.filter(f=>f.status==='PAGO_LIBERAR' || f.mac) ); });
+// ROTAS FILA - CORRIGIDO: SO RETORNA PAGO_LIBERAR
+app.get('/api/liberacoes', (req, res) => { 
+  const pagos = fila.filter(f=>f.status==='PAGO_LIBERAR');
+  console.log(`[API] /api/liberacoes chamado - retornando ${pagos.length} PAGO_LIBERAR de ${fila.length} total`);
+  res.json(pagos); 
+});
 app.get('/fila', (req, res) => { res.json(fila); });
 app.get('/api/fila', (req, res) => { res.json(fila); });
-app.get('/api/liberacoes/limpar', (req, res) => { liberacoes = []; fila=[]; salvarLibs(); res.send('LIBERACOES LIMPAS!'); });
+app.get('/api/liberacoes/limpar', (req, res) => { liberacoes = []; fila=[]; salvarLibs(); console.log('LIBERACOES LIMPAS PELO ADMIN'); res.send('LIBERACOES LIMPAS!'); });
 
 function liberaPorTxid(detail) {
   try {
@@ -92,15 +96,15 @@ function liberaPorTxid(detail) {
     fila = fila.filter(l => (l.mac||'').toLowerCase() !== macInfo.toLowerCase() && l.txid !== detail.txid);
     const novo = { mac: macInfo, ip: ipInfo, tempo: tempoInfo, data: Date.now(), txid: detail.txid, status: 'PAGO_LIBERAR' };
     liberacoes.push(novo); fila.push(novo); salvarLibs();
-    console.log(`LIBERADO ${macInfo} ${tempoInfo} TXID ${detail.txid}`);
+    console.log(`✅ LIBERADO ${macInfo} ${tempoInfo} TXID ${detail.txid}`);
     return macInfo;
-  } catch (e) { return null; }
+  } catch (e) { console.log('ERRO LIBERA', e.message); return null; }
 }
 
 async function handlerGerarPix(req, res){
   try {
     const { valor, tempo, mac, ip } = req.body;
-    console.log(`GERAR PIX valor=${valor} tempo=${tempo} mac=${mac} ip=${ip}`);
+    console.log(`[${new Date().toLocaleTimeString('pt-BR')}] GERAR PIX valor=${valor} tempo=${tempo} mac=${mac} ip=${ip}`);
     const valorNum = Number(valor);
     if (!efi) return res.status(500).json({ erro: 'EFI nao configurado' });
     const body = {
@@ -115,17 +119,16 @@ async function handlerGerarPix(req, res){
     const qrcode = await efi.pixGenerateQRCode({ id: charge.loc.id });
     fila.push({ txid: charge.txid, tempo: tempo, valor: valor, mac: mac||'semmac', status: 'AGUARDANDO', data: Date.now() });
     salvarLibs();
-    console.log(`QR GERADO OK TXID ${charge.txid}`);
+    console.log(`✅ QR GERADO OK TXID ${charge.txid} MAC ${mac} - AGUARDANDO PAGAMENTO`);
     return res.json({ txid: charge.txid, qrcode: qrcode.qrcode, copiaecola: qrcode.qrcode, copia_e_cola: qrcode.qrcode, imagem: qrcode.imagemQrcode, imagemQrcode: qrcode.imagemQrcode });
   } catch (err) {
-    console.error('ERRO GERAR PIX', err);
+    console.error('❌ ERRO GERAR PIX', err);
     return res.status(500).json({ erro: err.message });
   }
 }
 app.post('/gerar', handlerGerarPix);
 app.post('/criar-pix', handlerGerarPix);
 
-// VOUCHER GERADOR - FORMATO EXATO DO TEU PRINT + PARAMS SERVER/UPTIME
 app.post('/api/gerar-voucher', (req, res) => {
   try {
     const { tempo, qtd, perfil, evento, server, uptime } = req.body;
@@ -154,19 +157,21 @@ app.post('/api/gerar-voucher', (req, res) => {
 async function handlerVerifica(req,res){
   try {
     const { txid } = req.params;
-    // FIX v12.5.2: se for voucher, nao mexe na fila
+    console.log(`[VERIFICA] txid=${txid}`);
     if (txid.startsWith('SLS-')) {
       console.log('VOUCHER CHECK IGNORADO NA FILA', txid);
       return res.json({ status: 'VOUCHER', pago: false, voucher: true });
     }
     const detail = await efi.pixDetailCharge({ txid });
     const status = detail.status || 'ATIVA';
+    console.log(`[VERIFICA] txid=${txid} status=${status}`);
     if (status === 'CONCLUIDA') {
       const macLiberado = liberaPorTxid(detail);
       return res.json({ status: 'CONCLUIDA', pago: true, mac: macLiberado });
     }
     return res.json({ status, pago: false });
   } catch (err) {
+    console.log('[VERIFICA ERRO]', err.message);
     return res.json({ status: 'ATIVA', pago: false });
   }
 }
@@ -175,6 +180,7 @@ app.get('/status/:txid', handlerVerifica);
 
 app.post('/webhook', async (req, res) => {
   try {
+    console.log('[WEBHOOK] recebido', JSON.stringify(req.body).substring(0,200));
     const pixs = req.body.pix || [];
     for (const p of pixs) {
       if (p.txid && efi) {
@@ -182,11 +188,10 @@ app.post('/webhook', async (req, res) => {
         if (detail.status === 'CONCLUIDA') liberaPorTxid(detail);
       }
     }
-  } catch (e) {}
+  } catch (e) { console.log('WEBHOOK ERRO', e.message); }
   res.status(200).end();
 });
 
-// FIX v12.5.2 - NAO APAGA FILA SE FOR VOUCHER
 app.get('/liberado/:txid',(req,res)=>{
   const txid = req.params.txid;
   if (txid.startsWith('SLS-')) {
@@ -208,11 +213,10 @@ app.get('/api/liberado/:txid',(req,res)=>{
   res.json({ok:true});
 });
 
-// ADMIN PAGE
 app.get('/admin', (req,res)=>{
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => console.log(`SLS v12.5.2 ADMIN RODANDO PORTA ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`SLS v12.5.3 - LOGS CORRIGIDOS - RODANDO PORTA ${PORT}`));
