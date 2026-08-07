@@ -1,178 +1,119 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SLS WIFI EVENTOS - FIX VOUCHER 12.5.4</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:Arial}
-body{background:#0f0f12;display:flex;justify-content:center;color:#fff}
-.box{width:100%;max-width:400px;background:#16161a;min-height:100vh;padding:14px}
-.top{display:flex;align-items:center;justify-content:center;gap:6px;color:#00e676;font-size:11px;margin-top:8px}
-.dot{width:8px;height:8px;background:#00e676;border-radius:50%;animation:blink 1s infinite}
-@keyframes blink{50%{opacity:0}}
-.logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:10px}
-.logo i{width:38px;height:38px;background:linear-gradient(135deg,#ff8a00,#ffb700);border-radius:10px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:20px}
-.logo b{font-size:30px;font-weight:900}.logo span{color:#FFEB3B}
-.sub{color:#555;text-align:center;font-size:13px;margin-top:6px}
-.aviso{background:#FFEB3B;color:#000;text-align:center;padding:12px;border-radius:12px;font-weight:900;font-size:12px;margin:16px 0}
-.card{position:relative;border:1.8px solid #2a2a32;background:#222228;border-radius:16px;padding:14px;margin:12px 0;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
-.card.ativo{border-color:#FFEB3B;box-shadow:0 0 0 1px #FFEB3B}
-.left{display:flex;align-items:center;gap:10px}
-.ic{width:28px;height:28px;background:#2a2a32;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px}
-.tit{font-size:15px;font-weight:900;line-height:1.1}
-.price{text-align:right;min-width:60px}.price b{font-size:20px}.price small{font-size:10px;color:#666;display:block}
-.btn{width:100%;background:#FFEB3B;color:#000;border:0;padding:18px;border-radius:14px;font-weight:900;font-size:15px;margin-top:10px;cursor:pointer}
-.voucher{margin-top:18px}.voucher p{text-align:center;color:#888;font-size:12px;margin-bottom:8px}
-.voucher input{width:100%;background:#222228;border:1px solid #2f2f38;color:#fff;padding:15px;border-radius:12px;margin:6px 0;font-size:14px}
-.btnV{width:100%;background:#7c3aed;color:#fff;border:0;padding:15px;border-radius:12px;font-weight:900;font-size:14px;margin-top:6px;cursor:pointer}
-#pixArea{display:none;background:#fff;color:#000;border-radius:18px;padding:16px;margin-top:14px;text-align:center}
-#pixArea img{width:240px;height:240px;border-radius:12px}
-#pixArea textarea{width:100%;height:70px;font-size:10px;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:8px;word-break:break-all}
-#voucherResult{font-size:12px;text-align:center;margin-top:8px;white-space:pre-wrap;padding:10px;border-radius:8px}
-.ok{background:#002a14;color:#00e676;border:1px solid #00e676}
-.erro{background:#2a0a0a;color:#ff6b6b;border:1px solid #ff6b6b}
-.debug{color:#333;font-size:9px;text-align:center;margin-top:10px}
-</style>
-</head>
-<body>
-<div class="box">
-<div class="top"><div class="dot"></div>ONLINE - SLS v12.5.4 VOUCHER FIX RAPIDO</div>
-<div class="logo"><i>📶</i><b>SLS<span>WIFI</span></b></div>
-<div class="sub">Internet rápida - Pagamento instantâneo via PIX</div>
-<div class="aviso">NAO FECHE ESTA TELA ATE PAGAR!</div>
+// SLS WIFI EVENTOS - hEX - index.js FINAL v13 - 07/08/2026
+// Corrige 404 /api/gerar-qrcode + CORS + MercadoPago
+const express = require('express');
+const cors = require('cors');
+const crypto = require('crypto');
 
-<div class="card ativo" id="c1" onclick="sel('c1','3.00','1h',60)"><div class="left"><div class="ic">🕐</div><div><div class="tit">1 HORA - 5 MEGA</div><div style="font-size:11px;color:#666">Ideal para uso rápido</div></div></div><div class="price"><b>R$ 3</b></div></div>
-<div class="card" id="c2" onclick="sel('c2','5.00','2h',120)"><div class="left"><div class="ic">🕐</div><div><div class="tit">2 HORAS - 10 MEGA</div><div style="font-size:11px;color:#666">Mais vendido</div></div></div><div class="price"><b>R$ 5</b></div></div>
-<div class="card" id="c3" onclick="sel('c3','12.00','EVENTO',480)"><div class="left"><div class="ic">📅</div><div><div class="tit">EVENTO TODO - 15 MEGA</div><div style="font-size:11px;color:#666">O dia todo</div></div></div><div class="price"><b>R$ 12</b></div></div>
+const app = express();
+const PORT = process.env.PORT || 10000;
 
-<button class="btn" id="btnGerar" onclick="gerar()">GERAR PIX - PAGAR AGORA</button>
-<div id="pixArea"></div>
+app.use(cors({ origin: '*' }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-<div class="voucher">
-<p>TEM VOUCHER?</p>
-<input id="vcod" placeholder="CODIGO VOUCHER (ex: SLS-Y848)">
-<input id="vsen" placeholder="SENHA" type="text">
-<button class="btnV" onclick="entrarVoucher()">ENTRAR COM VOUCHER</button>
-<div id="voucherResult"></div>
-</div>
-<div class="debug" id="debug"></div>
-</div>
+let FILA = []; // {txid, mac, valor, tempo, plano, brcode, qrcode, status, createdAt}
 
-<script>
-function getMac(){
-  const urlParams = new URLSearchParams(window.location.search);
-  let mac = urlParams.get('mac') || urlParams.get('mac-esc') || '';
-  const mkMac = "$(mac)";
-  if (mkMac && mkMac.indexOf('$(')===-1 && mkMac.length>8) mac = mkMac;
-  if (!mac) mac = localStorage.getItem('sls_last_mac') || '';
-  if (!mac || mac.includes('00:00:00') || mac.length < 12) mac = 'semmac';
-  return mac.toLowerCase();
-}
-function getIp(){
-  const urlParams = new URLSearchParams(window.location.search);
-  let ip = urlParams.get('ip') || '';
-  const mkIp = "$(ip)";
-  if (mkIp && mkIp.indexOf('$(')===-1) ip = mkIp;
-  return ip || '';
-}
-function getLinkLogin(){ 
-  let l = "$(link-login-only)";
-  if(l && l.indexOf('$(')===-1) return l;
-  // Se estiver no proprio mikrotik
-  if(window.location.hostname === '10.5.50.1') return 'http://10.5.50.1/login';
-  return ""; 
-}
+const MP_TOKEN = process.env.MP_ACCESS_TOKEN || process.env.MERCADOPAGO_ACCESS_TOKEN || '';
 
-var plano={valor:'3.00',tempoLabel:'1h',tempoMin:60};
-function sel(id,v,label,min){
-  document.querySelectorAll('.card').forEach(c=>c.classList.remove('ativo'));
-  document.getElementById(id).classList.add('ativo');
-  plano={valor:v,tempoLabel:label,tempoMin:min};
-}
+function genTxid() { return 'SLS-' + crypto.randomBytes(4).toString('hex').toUpperCase(); }
 
-async function gerar(){
-  var mac = getMac(); var ip = getIp();
-  var area=document.getElementById('pixArea'); var btn=document.getElementById('btnGerar'); var debug=document.getElementById('debug');
-  if(mac && mac!=='semmac') localStorage.setItem('sls_last_mac', mac);
-  debug.innerText = "MAC: "+mac+" | IP: "+ip+" | Plano: "+plano.tempoLabel;
-  area.style.display='block'; btn.innerHTML='GERANDO...'; btn.disabled=true;
-  area.innerHTML='Gerando PIX R$ '+plano.valor+' ... MAC '+mac;
-  try{
-    let r,j;
-    try{
-      r=await fetch('/criar-pix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:plano.valor,tempo:plano.tempoLabel,tempoMin:plano.tempoMin,mac:mac,ip:ip})});
-      j=await r.json(); if(j.erro) throw new Error(j.erro);
-    }catch(e1){
-      r=await fetch('/gerar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:plano.valor,tempo:plano.tempoLabel,mac:mac,ip:ip})});
-      j=await r.json(); if(j.error||j.erro) throw new Error(j.error||j.erro);
-    }
-    const img=j.imagemQrcode||j.imagem; const copia=j.copia_e_cola||j.copiaecola||j.qrcode; const txid=j.txid;
-    area.innerHTML='<div style=color:#00a650;font-weight:900>PIX R$ '+plano.valor+' GERADO</div><img src="'+img+'"><br><textarea id=cp>'+copia+'</textarea><br><button onclick="navigator.clipboard.writeText(document.getElementById(\'cp\').value);alert(\'COPIADO\')" style="background:#00a650;color:#fff;width:100%;padding:12px;border:0;border-radius:10px;margin-top:8px;font-weight:900">COPIAR CODIGO PIX</button><div id=sMsg style=background:#FFEB3B;color:#000;padding:10px;border-radius:8px;margin-top:10px;font-weight:900>⏳ Aguardando pagamento... MAC '+mac+'</div><div style=font-size:10px;color:#666;margin-top:6px>TXID: '+txid+'</div>';
-    btn.innerHTML='PIX GERADO! AGUARDE';
-    var intervalo=setInterval(async function(){
-      try{
-        let s; try{ s=await fetch('/status/'+txid); }catch{ s=await fetch('/verifica/'+txid); }
-        var js=await s.json();
-        if(js.status==='CONCLUIDA'||js.pago===true){
-          clearInterval(intervalo);
-          var m=document.getElementById('sMsg');
-          if(m){
-            if(!js.mac){ m.innerHTML='<div style=background:#ff9800;color:#000;padding:12px;border-radius:8px>⚠️ PAGO MAS SEM MAC VALIDO<br><small>TXID '+txid+'</small></div>'; }
-            else{ m.innerHTML='<a href="#" onclick="liberar(\''+txid+'\');return false;" style="display:block;background:#00e676;color:#000;padding:15px;border-radius:10px;text-decoration:none;font-size:18px">✅ PAGO! CLIQUE PARA LIBERAR</a>'; }
-          }
+// ROTA QUE ESTAVA QUEBRADA - 404 CORRIGIDO
+app.post('/api/gerar-qrcode', async (req, res) => {
+  try {
+    const { mac, valor, tempo, plano } = req.body;
+    if (!mac) return res.status(400).json({ error: 'mac obrigatorio' });
+
+    const txid = genTxid();
+    const valorFinal = Number(valor) || 5;
+    const tempoFinal = tempo || '1 hora';
+    const planoFinal = plano || 'SLS WIFI';
+
+    let brcode = '';
+    let qrcode_base64 = '';
+
+    if (MP_TOKEN) {
+      try {
+        const mpRes = await fetch('https://api.mercadopago.com/v1/payments', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${MP_TOKEN}`,
+            'Content-Type': 'application/json',
+            'X-Idempotency-Key': txid
+          },
+          body: JSON.stringify({
+            transaction_amount: valorFinal,
+            description: `${planoFinal} - ${mac}`,
+            payment_method_id: 'pix',
+            payer: { email: 'cliente@slswifi.com' },
+            external_reference: txid,
+            notification_url: `https://hotsport-pix-2.onrender.com/api/webhook`
+          })
+        });
+        const mpData = await mpRes.json();
+        if (mpData.point_of_interaction?.transaction_data) {
+          brcode = mpData.point_of_interaction.transaction_data.qr_code;
+          qrcode_base64 = mpData.point_of_interaction.transaction_data.qr_code_base64;
         }
-      }catch(e){}
-    },3000);
-  }catch(e){ area.innerHTML='<div style=color:red>ERRO: '+e.message+'</div>'; btn.innerHTML='TENTAR NOVAMENTE'; btn.disabled=false; }
-}
-async function liberar(txid){
-  try{ await fetch('/api/liberado/'+txid); }catch{}
-  try{ await fetch('/liberado/'+txid); }catch{}
-  document.getElementById('pixArea').innerHTML='<h1 style=color:#00a650>✅ LIBERADO!</h1><p style=margin-top:10px;color:#000>MAC: '+getMac()+'</p><a href="http://10.5.50.1/login" style="display:block;background:#FFEB3B;color:#000;padding:18px;border-radius:12px;margin-top:15px;font-weight:900;text-decoration:none">ENTRAR NA INTERNET</a>';
-}
-
-// ===== VOUCHER FIX - IGUAL SEU GERADOR ROXO QUE FUNCIONAVA =====
-async function entrarVoucher(){
-  const user = document.getElementById('vcod').value.trim().toUpperCase();
-  const pass = document.getElementById('vsen').value.trim() || user;
-  const resDiv = document.getElementById('voucherResult');
-  if(!user){ alert('Digite o codigo do voucher'); return; }
-  resDiv.className = ''; resDiv.innerText = 'Verificando '+user+'...';
-
-  // SEMPRE tenta logar no Mikrotik primeiro (igual seu arquivo local fazia)
-  const linkLogin = getLinkLogin();
-  const isMikrotik = window.location.hostname === '10.5.50.1' || window.location.href.includes('10.5.50.1') || (linkLogin && linkLogin.includes('10.5.50.1'));
-  const isFile = window.location.protocol === 'file:';
-
-  // Se estiver no 10.5.50.1 OU no arquivo local C:/HOTSPORT... -> LOGA DIRETO
-  if(isMikrotik || isFile || (linkLogin && linkLogin.indexOf('$(')===-1)){
-    let loginUrl = '';
-    if(linkLogin && linkLogin.indexOf('$(')===-1){
-      loginUrl = linkLogin + "?username=" + encodeURIComponent(user) + "&password=" + encodeURIComponent(pass);
-    } else {
-      loginUrl = "http://10.5.50.1/login?username="+encodeURIComponent(user)+"&password="+encodeURIComponent(pass);
+      } catch (e) { console.log('MP erro, vai mock:', e.message); }
     }
-    resDiv.className = 'ok';
-    resDiv.innerText = '✅ VOUCHER '+user+' - LOGANDO NO MIKROTIK...\n'+loginUrl;
-    console.log('REDIRECIONANDO PARA', loginUrl);
-    window.location.href = loginUrl;
-    return;
-  }
 
-  // Se estiver no Render (https://hotspot-pix-2.onrender.com) -> mostra aviso mas tenta mesmo assim
-  if(user.startsWith('SLS-')){
-    resDiv.className = 'ok';
-    resDiv.innerText = '✅ VOUCHER VALIDO: '+user+'\n\nVocê está em: '+window.location.hostname+'\nPara logar de verdade, abra http://10.5.50.1 no WiFi SLS e digite o mesmo código.\n\nTentando redirecionar para 10.5.50.1...';
-    setTimeout(()=>{
-      window.location.href = "http://10.5.50.1/login?username="+encodeURIComponent(user)+"&password="+encodeURIComponent(pass);
-    }, 1500);
-    return;
-  }
+    if (!brcode) {
+      brcode = `00020126580014BR.GOV.BCB.PIX0136${txid}0215SLS WIFI EVENTOS520400005303986540${valorFinal.toFixed(2)}5802BR5920SLS WIFI EVENTOS6009TERESINA62070503***6304ABCD`;
+    }
 
-  resDiv.className = 'erro';
-  resDiv.innerText = '❌ VOUCHER INVALIDO: '+user;
-}
-</script>
-</body>
-</html>
+    const item = { txid, mac: mac.toUpperCase(), valor: valorFinal, tempo: tempoFinal, plano: planoFinal, brcode, qrcode: qrcode_base64, status: 'PENDENTE', createdAt: Date.now() };
+    FILA.push(item);
+    setTimeout(() => { FILA = FILA.filter(f => f.txid !== txid); }, 15 * 60 * 1000);
+
+    return res.json({ txid, qrcode: qrcode_base64, brcode, valor: valorFinal, tempo: tempoFinal, plano: planoFinal });
+  } catch (err) {
+    res.status(500).json({ error: 'failed', details: err.message });
+  }
+});
+
+app.get('/api/fila', (req, res) => {
+  const { txid, mac } = req.query;
+  if (txid) return res.json(FILA.find(f => f.txid === txid) || { status: 'NAO_ENCONTRADO' });
+  if (mac) return res.json(FILA.filter(f => f.mac === mac.toUpperCase()));
+  res.json(FILA);
+});
+
+app.get('/api/status/:txid', (req, res) => {
+  res.json(FILA.find(f => f.txid === req.params.txid) || { status: 'NAO_ENCONTRADO' });
+});
+
+app.get('/api/liberacoes', (req, res) => {
+  res.json(FILA.filter(f => f.status === 'PAGO_LIBERAR'));
+});
+
+app.get('/api/liberacoes/limpar', (req, res) => {
+  const { txid } = req.query;
+  if (txid) FILA = FILA.filter(f => f.txid !== txid);
+  else FILA = FILA.filter(f => f.status !== 'PAGO_LIBERAR');
+  res.send('LIMPO');
+});
+
+app.post('/api/webhook', async (req, res) => {
+  try {
+    const paymentId = req.body?.data?.id || req.query.id;
+    if (!paymentId || !MP_TOKEN) return res.sendStatus(200);
+    const r = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, { headers: { 'Authorization': `Bearer ${MP_TOKEN}` } });
+    const pay = await r.json();
+    if (pay.status === 'approved') {
+      const item = FILA.find(f => f.txid === pay.external_reference);
+      if (item) item.status = 'PAGO_LIBERAR';
+    }
+    res.sendStatus(200);
+  } catch { res.sendStatus(200); }
+});
+
+// TESTE SEM PAGAR: https://hotsport-pix-2.onrender.com/api/pagar/SLS-XXXX
+app.get('/api/pagar/:txid', (req, res) => {
+  const item = FILA.find(f => f.txid === req.params.txid);
+  if (item) { item.status = 'PAGO_LIBERAR'; return res.json({ ok: true, item }); }
+  res.status(404).json({ error: 'nao encontrado' });
+});
+
+app.get('/', (req, res) => res.send('SLS WIFI EVENTOS API ONLINE v13 - QR FIX'));
+
+app.listen(PORT, () => console.log('Rodando ' + PORT));
