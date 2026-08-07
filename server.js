@@ -71,7 +71,7 @@ async function coreGerar(req,res){
         const charge=await efi.pixCreateImmediateCharge([], body);
         const qr=await efi.pixGenerateQRCode({ id: charge.loc.id });
         brcode=qr.qrcode||qr.qrCode||'';
-        console.log('[EFI] OK real');
+        console.log(`[EFI] OK real - ${txid} MAC=${mac}`);
       }
     }catch(e){ console.log('[EFI] erro, mock', e.message); }
 
@@ -79,7 +79,7 @@ async function coreGerar(req,res){
 
     const item={ txid, mac, ip, valor, tempo, plano, brcode, qrcode:brcode, copiaecola:brcode, pixCopiaECola:brcode, status:'PENDENTE', createdAt:Date.now() };
     FILA.push(item);
-    console.log(`[FILA] Novo - TXID=${txid} MAC=${mac} IP=${ip} R$${valor} - Total fila: ${FILA.length}`);
+    console.log(`[FILA] Novo PENDENTE - TXID=${txid} MAC=${mac} IP=${ip} R$${valor} - Total: ${FILA.length}`);
     setTimeout(()=>{ FILA=FILA.filter(f=>f.txid!==txid); }, 15*60*1000);
 
     // Retorno compatível com TUDO: front amarelo novo e antigo
@@ -127,13 +127,13 @@ app.get('/api/liberacoes/limpar', (req,res)=>{
 });
 
 // Verificações
-app.get('/api/pix/verifica/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); return res.json(f||{status:'NAO_ENCONTRADO'}); });
+app.get('/api/pix/verifica/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); console.log(`[VERIFICA] ${req.params.txid} -> ${f?.status}`); return res.json(f||{status:'NAO_ENCONTRADO'}); });
 app.get('/api/verifica/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); return res.json(f||{status:'NAO_ENCONTRADO'}); });
 app.get('/api/status/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); return res.json(f||{status:'NAO_ENCONTRADO'}); });
 
-// Pagar / simular
-app.get('/api/pagar/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); if(f){ f.status='PAGO_LIBERAR'; return res.json({ok:true, status:'PAGO_LIBERAR', mac:f.mac, txid:f.txid}); } return res.json({ok:false}); });
-app.get('/api/simular-pago/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); if(f){ f.status='PAGO_LIBERAR'; return res.json({ok:true}); } return res.json({ok:false}); });
+// Pagar / simular - COM LOG MAC
+app.get('/api/pagar/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); if(f){ f.status='PAGO_LIBERAR'; console.log(`[PAGO] TXID=${f.txid} MAC=${f.mac} IP=${f.ip} -> PAGO_LIBERAR`); return res.json({ok:true, status:'PAGO_LIBERAR', mac:f.mac, ip:f.ip, txid:f.txid}); } console.log(`[PAGO] TXID ${req.params.txid} NAO ENCONTRADO`); return res.json({ok:false}); });
+app.get('/api/simular-pago/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); if(f){ f.status='PAGO_LIBERAR'; console.log(`[PAGO SIMULADO] ${f.txid} MAC=${f.mac}`); return res.json({ok:true}); } return res.json({ok:false}); });
 
 app.post('/api/webhook', (req,res)=> res.sendStatus(200));
 app.post('/api/webhook/pix', (req,res)=>{
