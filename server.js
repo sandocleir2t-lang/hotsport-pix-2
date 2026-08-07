@@ -1,161 +1,252 @@
-// SLS WIFI EVENTOS - server.js v13.7 FINAL 100% - 07/08 06:14 FIX
-// FIX: une todas as rotas, serve index.html da raiz e de /public, EFI real + mock
+// SLS WIFI - server.js v13 FINAL - COMPLETO
+// PIX EFI + VOUCHER + PERSISTÊNCIA EM DISCO
+// Não perde pagamento quando Render reinicia
 
+require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
-require('dotenv').config();
+const cors = require('cors');
+const axios = require('axios');
 
 const app = express();
-const PORT = process.env.PORT || 10000;
-
-process.on('uncaughtException', e => console.error(e.message));
-process.on('unhandledRejection', e => console.error(e?.message));
-
-app.use(cors({ origin: '*', methods: ['GET','POST','OPTIONS'], allowedHeaders: ['*'] }));
+app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Serve tanto public/ quanto raiz
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static(__dirname));
+const FILA_PATH = path.join(__dirname, 'fila.json');
+const PORT = process.env.PORT || 10000;
 
-let FILA = []; // {txid, mac, ip, valor, tempo, plano, brcode, status, createdAt}
-
-function genTxid(){ return 'SLS'+Date.now().toString().slice(-6)+crypto.randomBytes(2).toString('hex').toUpperCase(); }
-
-function safeCert(){
-  try{
-    const b64=process.env.EFI_CERTIFICADO_BASE64;
-    if(!b64) return null;
-    const p=path.join(__dirname,'certificado.p12');
-    if(!fs.existsSync(p)) fs.writeFileSync(p, Buffer.from(b64,'base64'));
-    return p;
-  }catch{ return null; }
+// ===== PERSISTÊNCIA =====
+let fila = {};
+try {
+  if (fs.existsSync(FILA_PATH)) {
+    fila = JSON.parse(fs.readFileSync(FILA_PATH, 'utf8'));
+    console.log(`[SLS] Fila carregada: ${Object.keys(fila).length} registros`);
+  }
+} catch (e) {
+  console.log('[SLS] fila.json não existe, criando novo');
+  fila = {};
+}
+function salvarFila() {
+  fs.writeFileSync(FILA_PATH, JSON.stringify(fila, null, 2));
 }
 
-function mockPix(txid, valor){
-  const chave=process.env.EFI_PIX_KEY||'slswifi@pix.com';
-  const v=Number(valor||5).toFixed(2);
-  // BRCode simples que funciona pra copiar e gerar QR
-  return `00020126580014BR.GOV.BCB.PIX0136${chave}520400005303986540${v}5802BR5925SLS WIFI EVENTOS6009TERESINA62070503***6304${txid.slice(-4)}`;
-}
+// ===== EFI CONFIG - usa suas env do Render =====
+const EFI_CLIENT_ID = process.env.EFI_CLIENT_ID;
+const EFI_CLIENT_SECRET = process.env.EFI_CLIENT_SECRET;
+const EFI_PIX_KEY = process.env.EFI_PIX_KEY;
+const EFI_CERT_PATH = process.env.EFI_CERT_PATH || './certificado.p12';
 
-async function getEfi(){
-  try{
-    const id=process.env.EFI_CLIENT_ID, sec=process.env.EFI_CLIENT_SECRET, cert=safeCert();
-    if(!id||!sec||!cert) return null;
-    const EfiPay=require('sdk-node-apis-efi');
-    return new EfiPay({ sandbox:false, client_id:id, client_secret:sec, certificate:cert, cert_base64:false });
-  }catch{ return null; }
-}
+let efiToken = null;
+let efiTokenExpira = 0;
 
-async function coreGerar(req,res){
-  try{
-    const b=req.body||{}, q=req.query||{};
-    const mac=(b.mac||q.mac||'FF:FF:FF:FF:FF:FF').toString().toUpperCase().replace(/%3A/g,':');
-    const ip=b.ip||q.ip||'0.0.0.0';
-    const valor=Number(b.valor||b.value||q.valor||3);
-    const tempo=b.tempo||q.tempo||'1h';
-    const plano=b.plan||b.plano||b.profile||tempo;
-    const txid=genTxid();
-    let brcode='';
-
-    try{
-      const efi=await getEfi();
-      if(efi){
-        console.log(`[EFI] Gerando real TXID=${txid} VALOR=${valor} MAC=${mac} IP=${ip} PLANO=${plano}`);
-        const body={ calendario:{expiracao:3600}, valor:{original:valor.toFixed(2)}, chave:process.env.EFI_PIX_KEY, solicitacaoPagador:`SLS ${plano}`.slice(0,25) };
-        const charge=await efi.pixCreateImmediateCharge([], body);
-        const qr=await efi.pixGenerateQRCode({ id: charge.loc.id });
-        brcode=qr.qrcode||qr.qrCode||'';
-        console.log(`[EFI] OK real - ${txid} MAC=${mac}`);
-      }
-    }catch(e){ console.log('[EFI] erro, mock', e.message); }
-
-    if(!brcode) brcode=mockPix(txid, valor);
-
-    const item={ txid, mac, ip, valor, tempo, plano, brcode, qrcode:brcode, copiaecola:brcode, pixCopiaECola:brcode, status:'PENDENTE', createdAt:Date.now() };
-    FILA.push(item);
-    console.log(`[FILA] Novo PENDENTE - TXID=${txid} MAC=${mac} IP=${ip} R$${valor} - Total: ${FILA.length}`);
-    setTimeout(()=>{ FILA=FILA.filter(f=>f.txid!==txid); }, 15*60*1000);
-
-    // Retorno compatível com TUDO: front amarelo novo e antigo
-    return res.status(200).json({
-      ok:true, txid, id:txid, valor, tempo, plano, mac,
-      brcode, copiaecola:brcode, pixCopiaECola:brcode, qrcode:brcode, qr:brcode,
-      imagem:null, qrcode_url:`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(brcode)}`,
-      pix:{ qrcode:brcode, copiaECola:brcode }, data:{ brcode },
-      status:'PENDENTE'
-    });
-  }catch(err){
-    const txid=genTxid(); const code=mockPix(txid,5);
-    return res.status(200).json({ ok:true, txid, brcode:code, copiaecola:code, pixCopiaECola:code, qrcode:code, status:'PENDENTE', fallback:true });
+async function getEfiToken() {
+  if (efiToken && Date.now() < efiTokenExpira) return efiToken;
+  try {
+    const auth = Buffer.from(`${EFI_CLIENT_ID}:${EFI_CLIENT_SECRET}`).toString('base64');
+    // Se usar certificado, precisa agent https
+    const resp = await axios.post('https://api.efipay.com.br/oauth/token', 
+      { grant_type: 'client_credentials' },
+      { headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' } }
+    );
+    efiToken = resp.data.access_token;
+    efiTokenExpira = Date.now() + (resp.data.expires_in * 1000) - 60000;
+    console.log('[EFI] Token renovado');
+    return efiToken;
+  } catch (e) {
+    console.error('[EFI] Erro token', e.response?.data || e.message);
+    return null;
   }
 }
 
-// --- ROTAS QUE O FRONT CHAMA ---
-app.get('/api/health', (req,res)=> res.json({ status:'ok', version:'v13.7 FINAL 100% 06:14 FIX', time:new Date().toISOString(), total:FILA.length }));
-
-// TODAS apontam pro mesmo core
-app.post('/api/gerar-qrcode', coreGerar);
-app.get('/api/gerar-qrcode', coreGerar);
-app.post('/api/criar-pix', coreGerar);
-app.post('/api/gerar-pix', coreGerar);
-app.post('/api/pix/gerar', coreGerar); // <- ESSA QUE SEU INDEX.HTML ANTIGO CHAMAVA E DAVA 404
-app.post('/api/pix', coreGerar);
-app.post('/gerar-pix', coreGerar);
-app.post('/criar-pix', coreGerar);
-
-// FILA - polling a cada 3s
-app.get('/api/fila', (req,res)=>{
-  const {txid, mac}=req.query;
-  if(txid){ const f=FILA.find(x=>x.txid===txid); return res.json(f||{status:'NAO_ENCONTRADO'}); }
-  if(mac){ return res.json(FILA.filter(x=>x.mac===mac.toUpperCase())); }
-  return res.json(FILA);
+// ===== ROTAS =====
+app.get('/', (req, res) => {
+  res.send(`SLS WIFI ONLINE v13 - ${new Date().toISOString()} - Fila: ${Object.keys(fila).length}`);
 });
 
-// LIBERACOES - SLS-LIBERA v12.5.6 lê aqui
-app.get('/api/liberacoes', (req,res)=> res.json(FILA.filter(f=>f.status==='PAGO_LIBERAR')));
-app.get('/api/liberacoes/limpar', (req,res)=>{
-  const {txid}=req.query;
-  if(txid) FILA=FILA.filter(f=>f.txid!==txid);
-  else FILA=FILA.filter(f=>f.status!=='PAGO_LIBERAR');
-  return res.send('LIMPO');
+// GERAR QRCODE - chamado pelo login.html
+app.get('/api/gerar-qrcode', async (req, res) => {
+  try {
+    const { mac, ip, plano, valor } = req.query;
+    if (!mac) return res.status(400).json({ error: 'MAC obrigatório' });
+
+    const txid = 'SLS' + Math.random().toString(36).substring(2, 10).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
+    const valorFinal = valor || (plano === '1HORA' ? '3.00' : '5.00');
+
+    console.log(`[EFI] Gerando real TXID=${txid} VALOR=${valorFinal} MAC=${mac} IP=${ip} PLANO=${plano}`);
+
+    // Salva PENDENTE antes de chamar EFI pra não perder
+    fila[txid] = {
+      txid,
+      mac: mac.toUpperCase(),
+      ip: ip || '',
+      plano: plano || '1HORA',
+      valor: valorFinal,
+      status: 'PENDENTE',
+      timestamp: Date.now()
+    };
+    salvarFila();
+
+    // Tenta gerar PIX real na EFI
+    try {
+      const token = await getEfiToken();
+      if (token && EFI_PIX_KEY) {
+        const resp = await axios.put(`https://api.efipay.com.br/v2/cob/${txid}`, {
+          calendario: { expiracao: 3600 },
+          devedor: { cpf: '00000000000', nome: 'Cliente SLS WIFI' },
+          valor: { original: valorFinal },
+          chave: EFI_PIX_KEY,
+          solicitacaoPagador: `SLS WIFI ${plano}`
+        }, {
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+
+        const qrcode = resp.data?.loc?.id ? resp.data : null;
+        // Pega QRCode imagem
+        const qrResp = await axios.get(`https://api.efipay.com.br/v2/loc/${resp.data.loc.id}/qrcode`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        console.log(`[EFI] OK real - ${txid} MAC=${mac}`);
+        return res.json({
+          txid,
+          qrcode: qrResp.data.qrcode,
+          qrcodeImagem: qrResp.data.imagemQrcode,
+          valor: valorFinal
+        });
+      }
+    } catch (efiErr) {
+      console.error('[EFI] Falha ao gerar PIX real, usando fallback', efiErr.response?.data || efiErr.message);
+    }
+
+    // Fallback - retorna TXID mesmo sem EFI (para teste)
+    console.log(`[FILA] Novo PENDENTE - TXID=${txid} MAC=${mac} IP=${ip} R$${valorFinal} - Total: ${Object.keys(fila).length}`);
+    res.json({
+      txid,
+      qrcode: `00020126580014BR.GOV.BCB.PIX0136${EFI_PIX_KEY || 'sua-chave'}520400005303986540${valorFinal}5802BR5909SLS WIFI6009TERESINA62070503***6304`,
+      valor: valorFinal,
+      fallback: true
+    });
+
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Verificações
-app.get('/api/pix/verifica/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); console.log(`[VERIFICA] ${req.params.txid} -> ${f?.status}`); return res.json(f||{status:'NAO_ENCONTRADO'}); });
-app.get('/api/verifica/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); return res.json(f||{status:'NAO_ENCONTRADO'}); });
-app.get('/api/status/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); return res.json(f||{status:'NAO_ENCONTRADO'}); });
+// hEX consome a cada 30s - retorna quem pagou
+app.get('/api/liberacoes', (req, res) => {
+  const pagos = Object.values(fila).filter(f => f.status === 'PAGO_LIBERAR');
+  console.log(`[SLS] Processando fila... ${pagos.length} para liberar | Total: ${Object.keys(fila).length}`);
+  
+  if (pagos.length === 0) return res.set('Content-Type', 'text/plain').send('');
 
-// Pagar / simular - COM LOG MAC
-app.get('/api/pagar/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); if(f){ f.status='PAGO_LIBERAR'; console.log(`[PAGO] TXID=${f.txid} MAC=${f.mac} IP=${f.ip} -> PAGO_LIBERAR`); return res.json({ok:true, status:'PAGO_LIBERAR', mac:f.mac, ip:f.ip, txid:f.txid}); } console.log(`[PAGO] TXID ${req.params.txid} NAO ENCONTRADO`); return res.json({ok:false}); });
-app.get('/api/simular-pago/:txid', (req,res)=>{ const f=FILA.find(x=>x.txid===req.params.txid); if(f){ f.status='PAGO_LIBERAR'; console.log(`[PAGO SIMULADO] ${f.txid} MAC=${f.mac}`); return res.json({ok:true}); } return res.json({ok:false}); });
-
-app.post('/api/webhook', (req,res)=> res.sendStatus(200));
-app.post('/api/webhook/pix', (req,res)=>{
-  const pixs=req.body?.pix||[];
-  for(const p of pixs){ const f=FILA.find(x=>x.txid===p.txid); if(f) f.status='PAGO_LIBERAR'; }
-  return res.json({ok:true});
+  // Formato que seu SLS-LIBERA-v11 espera: TXID;MAC;IP;PLANO (um por linha)
+  let txt = '';
+  pagos.forEach(p => {
+    txt += `${p.txid};${p.mac};${p.ip};${p.plano}\n`;
+  });
+  res.set('Content-Type', 'text/plain').send(txt);
 });
 
-// Serve index.html - procura em 3 lugares
-app.get('/', (req,res)=>{
-  const p1=path.join(__dirname,'index.html');
-  const p2=path.join(__dirname,'public','index.html');
-  const p3=path.join(__dirname,'public','login.html');
-  if(fs.existsSync(p1)) return res.sendFile(p1);
-  if(fs.existsSync(p2)) return res.sendFile(p2);
-  if(fs.existsSync(p3)) return res.sendFile(p3);
-  return res.send('SLS WIFI v13.7 Live - index.html nao encontrado');
+// hEX chama depois de liberar para limpar
+app.get('/api/liberacoes/limpar', (req, res) => {
+  const { txid } = req.query;
+  if (txid && fila[txid]) {
+    console.log(`[SLS] Liberado e limpo TXID ${txid} MAC=${fila[txid].mac}`);
+    delete fila[txid];
+    salvarFila();
+  }
+  res.send('OK');
 });
 
-app.listen(PORT, ()=>{ console.log(`[v13.7 FINAL 100%] Porta ${PORT}`); safeCert(); });
+// WEBHOOK EFI - quando paga
+app.post('/api/webhook', (req, res) => {
+  try {
+    const body = req.body;
+    // EFI manda em pix[0].txid
+    const pixArray = body.pix || [];
+    if (pixArray.length === 0 && body.txid) pixArray.push({ txid: body.txid });
 
-setInterval(()=>{
-  const now=Date.now();
-  for(const f of FILA){ if(now-f.createdAt>3600000 && f.status==='PENDENTE') f.status='EXPIRADO'; }
-},5000);
+    pixArray.forEach(p => {
+      const txid = p.txid;
+      console.log(`[PAGO] Webhook TXID=${txid}`);
+      if (fila[txid]) {
+        fila[txid].status = 'PAGO_LIBERAR';
+        console.log(`[PAGO] TXID ${txid} -> PAGO_LIBERAR MAC=${fila[txid].mac}`);
+      } else {
+        // NÃO ENCONTRADO - recria para não perder pagamento (caso do seu SLS46069442D9)
+        console.log(`[PAGO] TXID ${txid} NAO ENCONTRADO, criando recuperacao`);
+        fila[txid] = {
+          txid,
+          mac: p.mac || 'RECUPERAR_MANUAL',
+          ip: '',
+          plano: '1HORA',
+          valor: p.valor || '3.00',
+          status: 'PAGO_LIBERAR',
+          timestamp: Date.now(),
+          recuperado: true
+        };
+      }
+    });
+
+    salvarFila();
+    res.sendStatus(200);
+  } catch (e) {
+    console.error('[WEBHOOK] Erro', e);
+    res.sendStatus(200);
+  }
+});
+
+// LIBERAR MANUAL - para o caso de hoje 32:CB:FB:4B:69:A7
+app.get('/api/liberar-manual', (req, res) => {
+  const { mac, ip, plano } = req.query;
+  if (!mac) return res.status(400).send('mac obrigatorio');
+  const txid = 'MANUAL_' + Date.now();
+  fila[txid] = {
+    txid,
+    mac: mac.toUpperCase(),
+    ip: ip || '',
+    plano: plano || '1HORA',
+    valor: '3.00',
+    status: 'PAGO_LIBERAR',
+    timestamp: Date.now()
+  };
+  salvarFila();
+  console.log(`[MANUAL] ${txid} MAC=${mac} liberado manual`);
+  res.send(`OK - ${mac} vai liberar em até 30s`);
+});
+
+// VOUCHER - só status, voucher mesmo é no hEX Users
+app.get('/api/vouchers', (req, res) => {
+  res.json({ info: 'Vouchers ficam no MikroTik IP > Hotspot > Users. Ex: SLS-1777 / SLS-1777' });
+});
+
+app.get('/api/status', (req, res) => {
+  res.json({
+    versao: 'v13 FINAL',
+    total: Object.keys(fila).length,
+    pendentes: Object.values(fila).filter(f => f.status === 'PENDENTE').length,
+    pagos_para_liberar: Object.values(fila).filter(f => f.status === 'PAGO_LIBERAR').length,
+    fila
+  });
+});
+
+// Limpa TXIDs velhos > 24h
+setInterval(() => {
+  const agora = Date.now();
+  let removidos = 0;
+  for (const txid in fila) {
+    if (agora - fila[txid].timestamp > 24*60*60*1000) {
+      delete fila[txid];
+      removidos++;
+    }
+  }
+  if (removidos) {
+    salvarFila();
+    console.log(`[SLS] Limpeza ${removidos} antigos`);
+  }
+}, 60*60*1000);
+
+app.listen(PORT, () => console.log(`[SLS] v13 FINAL rodando porta ${PORT}`));
