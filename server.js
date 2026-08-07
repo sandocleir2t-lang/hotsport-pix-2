@@ -32,8 +32,7 @@ function salvarLibs() {
     fs.writeFileSync(LIB_FILE_TMP, JSON.stringify(liberacoes, null, 2));
     fs.writeFileSync(FILA_FILE_TMP, JSON.stringify(fila, null, 2));
     fs.writeFileSync(LIB_FILE_SRC, JSON.stringify(liberacoes, null, 2));
-    console.log(`FILA SALVA total=${fila.length} PAGO_LIBERAR=${fila.filter(f=>f.status==='PAGO_LIBERAR').length} AGUARDANDO=${fila.filter(f=>f.status==='AGUARDANDO').length}`);
-  } catch(e){}
+// console.log(`FILA SALVA total=${fila.length} PAGO_LIBERAR=${fila.filter(f=>f.status==='PAGO_LIBERAR').length} AGUARDANDO=${fila.filter(f=>f.status==='AGUARDANDO').length}`);  } catch(e){}
 }
 
 const CERT_PATH_TMP = '/tmp/hotspot-producao.p12';
