@@ -1,217 +1,165 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SLS WIFI - Pagamento PIX</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SLS WIFI EVENTOS</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:Inter,system-ui,sans-serif}
-body{background:#0f0f14;color:#fff;min-height:100vh;display:flex;justify-content:center;padding:16px}
-.card{width:100%;max-width:380px;background:#1a1a23;border-radius:24px;padding:18px;border:1px solid #2a2a35;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-.top{display:flex;align-items:center;gap:8px;justify-content:center;color:#8a8aa3;font-size:12px;margin-bottom:14px}
-.dot{width:8px;height:8px;background:#00ff88;border-radius:50%;box-shadow:0 0 10px #00ff88;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-.logo{display:flex;flex-direction:column;align-items:center;margin-bottom:12px}
-.logo-icon{width:52px;height:52px;background:linear-gradient(135deg,#ff7a00,#ffaa00);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800}
-.logo h1{font-size:26px;letter-spacing:1px;margin-top:8px}
-.logo span{color:#ff7a00}
-.logo p{font-size:11px;color:#8a8aa3;margin-top:2px}
-.alert{background:#fff3cd;color:#664d03;border:1px solid #ffecb5;padding:10px;border-radius:12px;font-size:12px;font-weight:700;text-align:center;margin-bottom:14px}
-.plan-box{background:#242432;border-radius:14px;padding:12px;margin-bottom:10px;border:1px solid #2f2f42;cursor:pointer;transition:.2s;position:relative;display:flex;justify-content:space-between;align-items:center}
-.plan-box.active{border-color:#ff7a00;background:#2a2218}
-.plan-left{display:flex;gap:10px;align-items:center}
-.circle{width:22px;height:22px;border-radius:50%;border:2px solid #555;display:flex;align-items:center;justify-content:center;font-size:12px}
-.plan-box.active .circle{border-color:#ff7a00;background:#ff7a00;color:#000}
-.plan-box h3{font-size:14px}
-.plan-box small{font-size:11px;color:#8a8aa3}
-.price{font-size:18px;font-weight:800}
-.badge{position:absolute;top:-8px;right:12px;background:#a855f7;color:#fff;font-size:9px;padding:2px 8px;border-radius:20px;font-weight:700}
-.btn{width:100%;background:linear-gradient(135deg,#ffe600,#ffcc00);color:#000;border:none;padding:14px;border-radius:12px;font-weight:800;font-size:14px;cursor:pointer;margin-top:12px;box-shadow:0 4px 20px rgba(255,230,0,.3)}
-.btn:disabled{opacity:.6}
-.voucher-area{margin-top:16px;border-top:1px solid #2a2a35;padding-top:14px}
-.voucher-area label{font-size:11px;color:#8a8aa3;text-align:center;display:block;margin-bottom:8px}
-.input{width:100%;background:#0f0f14;border:1px solid #2f2f42;border-radius:10px;padding:12px;color:#fff;margin-bottom:8px;font-size:14px;outline:none}
-.input:focus{border-color:#ff7a00}
-.btn-voucher{width:100%;background:#3a3a4a;color:#8a8aa3;border:none;padding:12px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer}
-.error{margin-top:12px;background:#3a1a1a;border:1px solid #5a2a2a;color:#ffb3b3;padding:10px;border-radius:10px;font-size:12px;display:none;white-space:pre-wrap}
-#pixArea{display:none;margin-top:14px;background:#fff;color:#000;border-radius:14px;padding:14px;text-align:center}
-#qrcode{width:220px;height:220px;margin:10px auto;background:#fff;display:flex;align-items:center;justify-content:center;border-radius:8px}
-.footer{margin-top:18px;text-align:center;font-size:10px;color:#5a5a6a;line-height:1.4}
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+body{background:#0f0f12;display:flex;justify-content:center;color:#fff;min-height:100vh}
+.box{width:100%;max-width:400px;background:#16161a;min-height:100vh;padding:14px}
+.top{display:flex;align-items:center;justify-content:center;gap:6px;color:#555;font-size:11px;margin-top:8px}
+.dot{width:8px;height:8px;background:#00e676;border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%{opacity:1}50%{opacity:.4}100%{opacity:1}}
+.logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:10px}
+.logo i{width:38px;height:38px;background:linear-gradient(135deg,#ff8a00,#ffb700);border-radius:10px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:20px}
+.logo b{font-size:30px;font-weight:900}
+.logo span{color:#FFEB3B}
+.sub{color:#555;text-align:center;font-size:13px;margin-top:6px}
+.aviso{background:#FFEB3B;color:#000;text-align:center;padding:12px;border-radius:12px;font-weight:900;font-size:12px;margin:16px 0}
+.head{display:flex;justify-content:space-between;align-items:flex-start;margin:16px 2px}
+.head b{font-size:17px;line-height:1.1}
+.badge{background:#26263a;color:#9d9de0;font-size:10px;padding:8px 12px;border-radius:20px}
+.card{position:relative;border:1.8px solid #2a2a32;background:#222228;border-radius:16px;padding:14px;margin:12px 0;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.card.ativo{border-color:#FFEB3B;box-shadow:0 0 0 1px #FFEB3B}
+.tagMais{position:absolute;top:-10px;right:16px;background:#8b5cf6;color:#fff;font-size:9px;font-weight:900;padding:5px 12px;border-radius:20px}
+.left{display:flex;align-items:center;gap:10px}
+.ic{width:28px;height:28px;background:#2a2a32;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px}
+.tit{font-size:15px;font-weight:900;line-height:1.1}
+.price{text-align:right;min-width:60px}
+.price b{font-size:20px;color:#fff}
+.price small{font-size:10px;color:#666;display:block}
+.btn{width:100%;background:#FFEB3B;color:#000;border:0;padding:18px;border-radius:14px;font-weight:900;font-size:15px;margin-top:10px;cursor:pointer}
+.btn:disabled{opacity:.5}
+.voucher{margin-top:18px}
+.voucher p{text-align:center;color:#444;font-size:12px;margin-bottom:8px}
+.voucher input{width:100%;background:#222228;border:1px solid #2f2f38;color:#fff;padding:15px;border-radius:12px;margin:6px 0;font-size:14px}
+.btnV{width:100%;background:#2e2e4a;color:#8b8bff;border:0;padding:15px;border-radius:12px;font-weight:800;font-size:13px;margin-top:6px;cursor:pointer}
+#pixArea{display:none;background:#fff;color:#000;border-radius:18px;padding:16px;margin-top:14px;text-align:center}
+#pixArea img{width:240px;height:240px;border-radius:12px;background:#fff}
+#pixArea textarea{width:100%;height:70px;font-size:10px;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:8px;word-break:break-all}
+.debug{color:#333;font-size:9px;text-align:center;margin-top:10px}
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="top"><div class="dot"></div> ONLINE • <span id="count">247</span> CLIENTES CONECTADOS</div>
-  <div class="logo">
-    <div class="logo-icon">📶</div>
-    <h1>SLS<span>WIFI</span></h1>
-    <p>Internet rápida • Pagamento instantâneo via PIX</p>
-  </div>
-  <div class="alert">⚠ NAO FECHE ESTA TELA ATE PAGAR!</div>
+<div class="box">
+<div class="top"><div class="dot"></div>ONLINE - SLS v12.5 MERGE</div>
+<div class="logo"><i>📶</i><b>SLS<span>WIFI</span></b></div>
+<div class="sub">Internet rápida - Pagamento instantâneo via PIX</div>
+<div class="aviso">NAO FECHE ESTA TELA ATE PAGAR!</div>
+<div class="head"><div><b>ESCOLHA SEU<br>PLANO</b></div><div class="badge">⚡ Ativação imediata</div></div>
 
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <b style="font-size:13px">ESCOLHA SEU PLANO</b>
-    <span style="font-size:9px;background:#2a2a3a;padding:4px 8px;border-radius:20px">⚡ Ativação imediata</span>
-  </div>
+<div class="card ativo" id="c1" onclick="sel('c1','3.00','1h',60)"><div class="left"><div class="ic">🕐</div><div><div class="tit">1 HORA - 5</div><div style="font-weight:900">MEGA</div><div style="font-size:11px;color:#666">Ideal para uso rápido</div></div></div><div class="price"><b>R$ 3</b><small>1h de acesso</small></div></div>
 
-  <div class="plan-box active" data-valor="3" data-tempo="1h" data-profile="1HORA" data-plan="1HORA">
-    <div class="plan-left"><div class="circle">◷</div><div><h3>1 HORA - 5 MEGA</h3><small>Ideal para uso rápido</small></div></div>
-    <div style="text-align:right"><div class="price">R$ 3</div><small>1h de acesso</small></div>
-  </div>
+<div class="card" id="c2" onclick="sel('c2','5.00','2h',120)"><div class="tagMais">MAIS VENDIDO</div><div class="left"><div class="ic">🕐</div><div><div class="tit">2 HORAS - 10</div><div style="font-weight:900">MEGA</div><div style="font-size:11px;color:#666">Mais vendido</div></div></div><div class="price"><b>R$ 5</b><small>2h de acesso</small></div></div>
 
-  <div class="plan-box" data-valor="5" data-tempo="2h" data-profile="2HORAS" data-plan="2HORAS">
-    <span class="badge">MAIS VENDIDO</span>
-    <div class="plan-left"><div class="circle">◷</div><div><h3>2 HORAS - 10 MEGA</h3><small>Mais vendido - 10 Mega</small></div></div>
-    <div style="text-align:right"><div class="price">R$ 5</div><small>2h</small></div>
-  </div>
+<div class="card" id="c3" onclick="sel('c3','12.00','EVENTO',480)"><div class="left"><div class="ic">📅</div><div><div class="tit">EVENTO TODO -</div><div style="font-weight:900">15 MEGA</div><div style="font-size:11px;color:#666">O dia todo</div></div></div><div class="price"><b>R$ 12</b><small>8h de acesso</small></div></div>
 
-  <div class="plan-box" data-valor="12" data-tempo="8h" data-profile="DIARIA" data-plan="DIARIA">
-    <div class="plan-left"><div class="circle">📅</div><div><h3>EVENTO TODO - 15 MEGA</h3><small>Ultra rápido - o dia todo</small></div></div>
-    <div style="text-align:right"><div class="price">R$ 12</div><small>8h de acesso</small></div>
-  </div>
+<button class="btn" id="btnGerar" onclick="gerar()">GERAR PIX - PAGAR<br>AGORA</button>
+<div id="pixArea"></div>
 
-  <button class="btn" id="btnGerar">GERAR PIX - PAGAR AGORA</button>
-
-  <div id="pixArea">
-    <b id="pixValor">PIX R$ 3,00</b>
-    <div id="qrcode">Gerando...</div>
-    <input id="pixCopia" class="input" style="background:#f5f5f5;color:#000;font-size:11px" readonly>
-    <button class="btn" style="margin-top:8px;padding:10px" onclick="copiarPix()">COPIAR CÓDIGO PIX</button>
-    <small style="display:block;margin-top:8px;color:#666">Aguardando pagamento... Não feche.</small>
-  </div>
-
-  <div class="voucher-area">
-    <label>TEM VOUCHER?</label>
-    <input class="input" id="voucherUser" placeholder="CODIGO VOUCHER">
-    <input class="input" id="voucherPass" type="password" placeholder="SENHA">
-    <button class="btn-voucher" onclick="loginVoucher()">ENTRAR COM VOUCHER</button>
-  </div>
-
-  <div class="error" id="errorBox"></div>
-
-  <div class="footer" id="footerMac">
-    MAC: carregando... • IP: ... • SLS WIFI © 2025
-  </div>
+<div class="voucher"><p>TEM VOUCHER?</p><input id="vcod" placeholder="CODIGO VOUCHER"><input id="vsen" placeholder="SENHA" type="password"><button class="btnV" onclick="alert('Use login do Mikrotik')">ENTRAR COM VOUCHER</button></div>
+<div class="debug" id="debug"></div>
 </div>
 
 <script>
-// === CONFIG - SUA API ===
-const API_BASE = "https://sls-wifi-api.onrender.com";
-
-let planoSelecionado = {valor:3, tempo:'1h', profile:'1HORA', plan:'1HORA'};
-document.querySelectorAll('.plan-box').forEach(box=>{
-  box.addEventListener('click',()=>{
-    document.querySelectorAll('.plan-box').forEach(b=>b.classList.remove('active'));
-    box.classList.add('active');
-    planoSelecionado.valor = box.dataset.valor;
-    planoSelecionado.tempo = box.dataset.tempo;
-    planoSelecionado.profile = box.dataset.profile || box.dataset.tempo;
-    planoSelecionado.plan = box.dataset.plan || box.dataset.tempo;
-  });
-});
-
-// === CAPTURA MAC E IP DA URL DO HOTSPOT ===
-const urlParams = new URLSearchParams(window.location.search);
-let macRaw = urlParams.get('mac') || urlParams.get('mac-esc') || "$(mac)";
-let ipRaw = urlParams.get('ip') || "$(ip)";
-try{ macRaw = decodeURIComponent(macRaw); }catch{}
-try{ ipRaw = decodeURIComponent(ipRaw); }catch{}
-let mac = macRaw.replace(/%3A/gi, ':').trim().toUpperCase();
-let ip = ipRaw.trim();
-if(mac.includes('$') || mac.includes('(') || mac.length < 8){
-  mac = urlParams.get('mac') || '00:00:00:00:00:00';
-  try{ mac = decodeURIComponent(mac).toUpperCase(); }catch{}
+// ===== DETECCAO MAC ROBUSTA - NAO BLOQUEIA MAIS =====
+function getMac(){
+  // 1. Query string ?mac= / ?mac-esc=
+  const urlParams = new URLSearchParams(window.location.search);
+  let mac = urlParams.get('mac') || urlParams.get('mac-esc') || '';
+  // 2. Variavel do Mikrotik hotspot $(mac) - quando servido pelo MT, ele substitui
+  // Deixa placeholder, se o MT nao substituir fica literal $(mac), entao ignoramos
+  const mkMac = "$(mac)";
+  if (mkMac && mkMac.indexOf('$(')===-1 && mkMac.length>8) mac = mkMac;
+  // 3. LocalStorage ultimo MAC
+  if (!mac) mac = localStorage.getItem('sls_last_mac') || '';
+  // 4. Fallback semmac - MAS NAO BLOQUEIA
+  if (!mac || mac.includes('00:00:00') || mac.length < 12) mac = 'semmac';
+  return mac.toLowerCase();
 }
-if(ip.includes('$')) ip = '0.0.0.0';
-console.log('URL:', window.location.search);
-console.log('MAC:', mac, 'IP:', ip);
-document.getElementById('footerMac').innerText = 'MAC: '+mac+' • IP: '+ip+' • SLS WIFI © 2025 - Se MAC for 00:00 reconecte no WIFI';
+function getIp(){
+  const urlParams = new URLSearchParams(window.location.search);
+  let ip = urlParams.get('ip') || '';
+  const mkIp = "$(ip)";
+  if (mkIp && mkIp.indexOf('$(')===-1) ip = mkIp;
+  return ip || '';
+}
 
-const btn = document.getElementById('btnGerar');
-const errorBox = document.getElementById('errorBox');
+var plano={valor:'3.00',tempoLabel:'1h',tempoMin:60};
+function sel(id,v,label,min){
+  document.querySelectorAll('.card').forEach(c=>c.classList.remove('ativo'));
+  document.getElementById(id).classList.add('ativo');
+  plano={valor:v,tempoLabel:label,tempoMin:min};
+}
 
-btn.addEventListener('click', async ()=>{
-  if(mac === '00:00:00:00:00:00' || mac === '00:00:00:00' || mac.includes('00:00:00:00:00:00')){
-    alert('ERRO: MAC 00:00! Você abriu o arquivo direto (C:/). Você tem que abrir pelo portal do Mikrotik ou subir esse arquivo em IP > Hotspot > Files');
-    return;
-  }
-  errorBox.style.display='none';
-  btn.disabled=true;
-  btn.textContent='GERANDO PIX...';
+async function gerar(){
+  var mac = getMac();
+  var ip = getIp();
+  var area=document.getElementById('pixArea');
+  var btn=document.getElementById('btnGerar');
+  var debug=document.getElementById('debug');
+  
+  // SALVA ULTIMO MAC
+  if(mac && mac!=='semmac') localStorage.setItem('sls_last_mac', mac);
+  
+  debug.innerText = "MAC: "+mac+" | IP: "+ip+" | Plano: "+plano.tempoLabel;
+  
+  area.style.display='block';
+  btn.innerHTML='GERANDO...'; btn.disabled=true;
+  area.innerHTML='Gerando PIX R$ '+plano.valor+' ... MAC '+mac;
+
   try{
-    // CHAMA SUA API DIRETO - CORRIGIDO V12
-    const res = await fetch(API_BASE + '/api/pix/gerar', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({valor: Number(planoSelecionado.valor), tempo: planoSelecionado.tempo, plan: planoSelecionado.plan, profile: planoSelecionado.profile, mac, ip})
-    });
-    const text = await res.text();
-    let data;
-    try{ data = JSON.parse(text); }catch(e){ throw new Error('Erro servidor: '+text.slice(0,300)); }
-    
-    if(data.erro || data.error){ throw new Error(data.erro || data.error); }
-
-    document.getElementById('pixValor').textContent = 'PIX R$ '+planoSelecionado.valor+',00 - '+planoSelecionado.tempo;
-    document.getElementById('pixCopia').value = data.qrcode || data.copiaecola || data.brcode || '';
-    
-    if(data.imagem || data.qr_image){
-      document.getElementById('qrcode').innerHTML = `<img src="${data.imagem || data.qr_image}" style="width:100%">`;
-    } else if(data.qrcode_url){
-      document.getElementById('qrcode').innerHTML = `<img src="${data.qrcode_url}" style="width:100%">`;
-    } else {
-      // fallback sem imagem
-      document.getElementById('qrcode').innerHTML = `<canvas id="qrCanvas"></canvas><div style="font-size:10px;word-break:break-all;padding:4px">${(data.qrcode||'').slice(0,60)}...</div>`;
+    // tenta /criar-pix primeiro (v12.1) depois /gerar (v12.4) - dual compat
+    let r, j;
+    try{
+      r=await fetch('/criar-pix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:plano.valor,tempo:plano.tempoLabel,tempoMin:plano.tempoMin,mac:mac,ip:ip})});
+      j=await r.json();
+      if(j.erro) throw new Error(j.erro);
+    } catch(e1){
+      r=await fetch('/gerar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:plano.valor,tempo:plano.tempoLabel,mac:mac,ip:ip})});
+      j=await r.json();
+      if(j.error || j.erro) throw new Error(j.error||j.erro);
     }
-    
-    document.getElementById('pixArea').style.display='block';
-    document.getElementById('pixArea').scrollIntoView({behavior:'smooth'});
 
-    const txid = data.txid || data.id;
-    if(!txid){ throw new Error('Sem TXID retornado da API'); }
+    const img = j.imagemQrcode || j.imagem;
+    const copia = j.copia_e_cola || j.copiaecola || j.qrcode;
+    const txid = j.txid;
 
-    // Polling verifica pagamento
-    const interval = setInterval(async ()=>{
+    area.innerHTML='<div style=color:#00a650;font-weight:900>PIX R$ '+plano.valor+' GERADO</div><img src="'+img+'"><br><textarea id=cp>'+copia+'</textarea><br><button onclick="navigator.clipboard.writeText(document.getElementById(\'cp\').value);alert(\'COPIADO\')" style="background:#00a650;color:#fff;width:100%;padding:12px;border:0;border-radius:10px;margin-top:8px;font-weight:900">COPIAR CODIGO PIX</button><div id=sMsg style=background:#FFEB3B;color:#000;padding:10px;border-radius:8px;margin-top:10px;font-weight:900>⏳ Aguardando pagamento... MAC '+mac+'</div><div style=font-size:10px;color:#666;margin-top:6px>TXID: '+txid+'</div>';
+    btn.innerHTML='PIX GERADO! AGUARDE';
+
+    // polling status
+    var intervalo=setInterval(async function(){
       try{
-        const v = await fetch(API_BASE + '/api/pix/verifica/'+txid).then(r=>r.json());
-        console.log('Verifica:', v);
-        if(v.status==='CONCLUIDA' || v.pago === true || v.paid === true){
-          clearInterval(interval);
-          document.getElementById('pixArea').innerHTML = '<h2 style="color:green">✅ PAGAMENTO CONFIRMADO!<br>MAC '+mac+'</h2><p>Liberando internet... Aguarde 5s e pode navegar!</p>';
-          // A liberação agora é feita pelo script SLS-LIBERA-v11 no Mikrotik que consulta a API a cada 30s, não precisa mais chamar /api/liberacoes aqui
-          setTimeout(()=>{
-            // Tenta logar automatico no hotspot se estiver em regular, ou só libera se bypassed
-            window.location.href = 'http://10.5.50.1/login?username='+encodeURIComponent(mac)+'&password='+encodeURIComponent(mac);
-          }, 3000);
+        let s;
+        try{ s=await fetch('/status/'+txid); } catch{ s=await fetch('/verifica/'+txid); }
+        var js=await s.json();
+        if(js.status==='CONCLUIDA' || js.pago===true){
+          clearInterval(intervalo);
+          var m=document.getElementById('sMsg');
+          if(m){
+            if(!js.mac){
+              m.innerHTML='<div style=background:#ff9800;color:#000;padding:12px;border-radius:8px>⚠️ PAGO MAS SEM MAC VALIDO<br><small>Entre em contato: mostre esse TXID '+txid+'</small></div>';
+            } else {
+              m.innerHTML='<a href="#" onclick="liberar(\''+txid+'\');return false;" style="display:block;background:#00e676;color:#000;padding:15px;border-radius:10px;text-decoration:none;font-size:18px">✅ PAGO! CLIQUE PARA LIBERAR</a>';
+            }
+          }
         }
-      }catch(e){ console.log('erro verifica', e); }
-    }, 3000);
+      }catch(e){}
+    },3000);
 
-  }catch(err){
-    console.error(err);
-    errorBox.textContent = 'Erro: '+err.message + '\nVerifique se a API '+API_BASE+' está online no Render';
-    errorBox.style.display='block';
-  }finally{
-    btn.disabled=false;
-    btn.textContent='GERAR PIX - PAGAR AGORA';
+  }catch(e){
+    area.innerHTML='<div style=color:red>ERRO: '+e.message+'</div><div style=font-size:10px;color:#666>Verifique se o server v12.5 está no ar</div>';
+    btn.innerHTML='TENTAR NOVAMENTE'; btn.disabled=false;
   }
-});
+}
 
-function copiarPix(){
-  const input = document.getElementById('pixCopia');
-  input.select();
-  input.setSelectionRange(0, 99999);
-  document.execCommand('copy');
-  alert('PIX copiado!');
+async function liberar(txid){
+  try{ await fetch('/api/liberado/'+txid); } catch{}
+  try{ await fetch('/liberado/'+txid); } catch{}
+  document.getElementById('pixArea').innerHTML='<h1 style=color:#00a650>✅ LIBERADO!</h1><p style=margin-top:10px;color:#000">Seu MAC foi liberado: '+getMac()+'</p><p style=color:#000;margin-top:6px">Volte para o WiFi e navegue!</p><a href="http://10.5.50.1/login" style="display:block;background:#FFEB3B;color:#000;padding:18px;border-radius:12px;margin-top:15px;font-weight:900;text-decoration:none">ENTRAR NA INTERNET</a>';
 }
-function loginVoucher(){
-  const u = document.getElementById('voucherUser').value.trim();
-  const p = document.getElementById('voucherPass').value.trim();
-  if(!u||!p){ alert('Digite voucher e senha'); return; }
-  // IP do Hotspot - ajuste se seu gateway for diferente de 10.5.50.1
-  const hotspotIP = '10.5.50.1';
-  window.location.href = `http://${hotspotIP}/login?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`;
-}
-setInterval(()=>{ document.getElementById('count').textContent = 240+Math.floor(Math.random()*15); },5000);
 </script>
 </body>
 </html>
