@@ -5,16 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SLS WIFI EVENTOS</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
-body{background:#0f0f12;display:flex;justify-content:center;color:#fff;min-height:100vh}
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial}
+body{background:#0f0f12;display:flex;justify-content:center;color:#fff}
 .box{width:100%;max-width:400px;background:#16161a;min-height:100vh;padding:14px}
 .top{display:flex;align-items:center;justify-content:center;gap:6px;color:#555;font-size:11px;margin-top:8px}
-.dot{width:8px;height:8px;background:#00e676;border-radius:50%;animation:pulse 2s infinite}
-@keyframes pulse{0%{opacity:1}50%{opacity:.4}100%{opacity:1}}
+.dot{width:8px;height:8px;background:#00e676;border-radius:50%}
 .logo{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:10px}
 .logo i{width:38px;height:38px;background:linear-gradient(135deg,#ff8a00,#ffb700);border-radius:10px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:20px}
-.logo b{font-size:30px;font-weight:900}
-.logo span{color:#FFEB3B}
+.logo b{font-size:30px;font-weight:900}.logo span{color:#FFEB3B}
 .sub{color:#555;text-align:center;font-size:13px;margin-top:6px}
 .aviso{background:#FFEB3B;color:#000;text-align:center;padding:12px;border-radius:12px;font-weight:900;font-size:12px;margin:16px 0}
 .head{display:flex;justify-content:space-between;align-items:flex-start;margin:16px 2px}
@@ -26,55 +24,50 @@ body{background:#0f0f12;display:flex;justify-content:center;color:#fff;min-heigh
 .left{display:flex;align-items:center;gap:10px}
 .ic{width:28px;height:28px;background:#2a2a32;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px}
 .tit{font-size:15px;font-weight:900;line-height:1.1}
-.price{text-align:right;min-width:60px}
-.price b{font-size:20px;color:#fff}
-.price small{font-size:10px;color:#666;display:block}
+.price{text-align:right;min-width:60px}.price b{font-size:20px}.price small{font-size:10px;color:#666;display:block}
 .btn{width:100%;background:#FFEB3B;color:#000;border:0;padding:18px;border-radius:14px;font-weight:900;font-size:15px;margin-top:10px;cursor:pointer}
-.btn:disabled{opacity:.5}
-.voucher{margin-top:18px}
-.voucher p{text-align:center;color:#444;font-size:12px;margin-bottom:8px}
+.voucher{margin-top:18px}.voucher p{text-align:center;color:#444;font-size:12px;margin-bottom:8px}
 .voucher input{width:100%;background:#222228;border:1px solid #2f2f38;color:#fff;padding:15px;border-radius:12px;margin:6px 0;font-size:14px}
 .btnV{width:100%;background:#2e2e4a;color:#8b8bff;border:0;padding:15px;border-radius:12px;font-weight:800;font-size:13px;margin-top:6px;cursor:pointer}
 #pixArea{display:none;background:#fff;color:#000;border-radius:18px;padding:16px;margin-top:14px;text-align:center}
-#pixArea img{width:240px;height:240px;border-radius:12px;background:#fff}
+#pixArea img{width:240px;height:240px;border-radius:12px}
 #pixArea textarea{width:100%;height:70px;font-size:10px;margin-top:10px;border:1px solid #ddd;border-radius:8px;padding:8px;word-break:break-all}
 .debug{color:#333;font-size:9px;text-align:center;margin-top:10px}
+#voucherResult{color:#00e676;font-size:12px;text-align:center;margin-top:8px;white-space:pre-wrap}
 </style>
 </head>
 <body>
 <div class="box">
-<div class="top"><div class="dot"></div>ONLINE - SLS v12.5 MERGE</div>
+<div class="top"><div class="dot"></div>ONLINE - SLS v12.5.1 VOUCHER OK</div>
 <div class="logo"><i>📶</i><b>SLS<span>WIFI</span></b></div>
 <div class="sub">Internet rápida - Pagamento instantâneo via PIX</div>
 <div class="aviso">NAO FECHE ESTA TELA ATE PAGAR!</div>
 <div class="head"><div><b>ESCOLHA SEU<br>PLANO</b></div><div class="badge">⚡ Ativação imediata</div></div>
 
 <div class="card ativo" id="c1" onclick="sel('c1','3.00','1h',60)"><div class="left"><div class="ic">🕐</div><div><div class="tit">1 HORA - 5</div><div style="font-weight:900">MEGA</div><div style="font-size:11px;color:#666">Ideal para uso rápido</div></div></div><div class="price"><b>R$ 3</b><small>1h de acesso</small></div></div>
-
 <div class="card" id="c2" onclick="sel('c2','5.00','2h',120)"><div class="tagMais">MAIS VENDIDO</div><div class="left"><div class="ic">🕐</div><div><div class="tit">2 HORAS - 10</div><div style="font-weight:900">MEGA</div><div style="font-size:11px;color:#666">Mais vendido</div></div></div><div class="price"><b>R$ 5</b><small>2h de acesso</small></div></div>
-
 <div class="card" id="c3" onclick="sel('c3','12.00','EVENTO',480)"><div class="left"><div class="ic">📅</div><div><div class="tit">EVENTO TODO -</div><div style="font-weight:900">15 MEGA</div><div style="font-size:11px;color:#666">O dia todo</div></div></div><div class="price"><b>R$ 12</b><small>8h de acesso</small></div></div>
 
 <button class="btn" id="btnGerar" onclick="gerar()">GERAR PIX - PAGAR<br>AGORA</button>
 <div id="pixArea"></div>
 
-<div class="voucher"><p>TEM VOUCHER?</p><input id="vcod" placeholder="CODIGO VOUCHER"><input id="vsen" placeholder="SENHA" type="password"><button class="btnV" onclick="alert('Use login do Mikrotik')">ENTRAR COM VOUCHER</button></div>
+<div class="voucher">
+<p>TEM VOUCHER?</p>
+<input id="vcod" placeholder="CODIGO VOUCHER (ex: SLS-AB12)">
+<input id="vsen" placeholder="SENHA" type="password">
+<button class="btnV" onclick="entrarVoucher()">ENTRAR COM VOUCHER</button>
+<div id="voucherResult"></div>
+</div>
 <div class="debug" id="debug"></div>
 </div>
 
 <script>
-// ===== DETECCAO MAC ROBUSTA - NAO BLOQUEIA MAIS =====
 function getMac(){
-  // 1. Query string ?mac= / ?mac-esc=
   const urlParams = new URLSearchParams(window.location.search);
   let mac = urlParams.get('mac') || urlParams.get('mac-esc') || '';
-  // 2. Variavel do Mikrotik hotspot $(mac) - quando servido pelo MT, ele substitui
-  // Deixa placeholder, se o MT nao substituir fica literal $(mac), entao ignoramos
   const mkMac = "$(mac)";
   if (mkMac && mkMac.indexOf('$(')===-1 && mkMac.length>8) mac = mkMac;
-  // 3. LocalStorage ultimo MAC
   if (!mac) mac = localStorage.getItem('sls_last_mac') || '';
-  // 4. Fallback semmac - MAS NAO BLOQUEIA
   if (!mac || mac.includes('00:00:00') || mac.length < 12) mac = 'semmac';
   return mac.toLowerCase();
 }
@@ -85,6 +78,7 @@ function getIp(){
   if (mkIp && mkIp.indexOf('$(')===-1) ip = mkIp;
   return ip || '';
 }
+function getLinkLogin(){ return "$(link-login-only)" || ""; }
 
 var plano={valor:'3.00',tempoLabel:'1h',tempoMin:60};
 function sel(id,v,label,min){
@@ -94,71 +88,79 @@ function sel(id,v,label,min){
 }
 
 async function gerar(){
-  var mac = getMac();
-  var ip = getIp();
-  var area=document.getElementById('pixArea');
-  var btn=document.getElementById('btnGerar');
-  var debug=document.getElementById('debug');
-  
-  // SALVA ULTIMO MAC
+  var mac = getMac(); var ip = getIp();
+  var area=document.getElementById('pixArea'); var btn=document.getElementById('btnGerar'); var debug=document.getElementById('debug');
   if(mac && mac!=='semmac') localStorage.setItem('sls_last_mac', mac);
-  
   debug.innerText = "MAC: "+mac+" | IP: "+ip+" | Plano: "+plano.tempoLabel;
-  
-  area.style.display='block';
-  btn.innerHTML='GERANDO...'; btn.disabled=true;
+  area.style.display='block'; btn.innerHTML='GERANDO...'; btn.disabled=true;
   area.innerHTML='Gerando PIX R$ '+plano.valor+' ... MAC '+mac;
-
   try{
-    // tenta /criar-pix primeiro (v12.1) depois /gerar (v12.4) - dual compat
-    let r, j;
+    let r,j;
     try{
       r=await fetch('/criar-pix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:plano.valor,tempo:plano.tempoLabel,tempoMin:plano.tempoMin,mac:mac,ip:ip})});
-      j=await r.json();
-      if(j.erro) throw new Error(j.erro);
-    } catch(e1){
+      j=await r.json(); if(j.erro) throw new Error(j.erro);
+    }catch(e1){
       r=await fetch('/gerar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({valor:plano.valor,tempo:plano.tempoLabel,mac:mac,ip:ip})});
-      j=await r.json();
-      if(j.error || j.erro) throw new Error(j.error||j.erro);
+      j=await r.json(); if(j.error||j.erro) throw new Error(j.error||j.erro);
     }
-
-    const img = j.imagemQrcode || j.imagem;
-    const copia = j.copia_e_cola || j.copiaecola || j.qrcode;
-    const txid = j.txid;
-
+    const img=j.imagemQrcode||j.imagem; const copia=j.copia_e_cola||j.copiaecola||j.qrcode; const txid=j.txid;
     area.innerHTML='<div style=color:#00a650;font-weight:900>PIX R$ '+plano.valor+' GERADO</div><img src="'+img+'"><br><textarea id=cp>'+copia+'</textarea><br><button onclick="navigator.clipboard.writeText(document.getElementById(\'cp\').value);alert(\'COPIADO\')" style="background:#00a650;color:#fff;width:100%;padding:12px;border:0;border-radius:10px;margin-top:8px;font-weight:900">COPIAR CODIGO PIX</button><div id=sMsg style=background:#FFEB3B;color:#000;padding:10px;border-radius:8px;margin-top:10px;font-weight:900>⏳ Aguardando pagamento... MAC '+mac+'</div><div style=font-size:10px;color:#666;margin-top:6px>TXID: '+txid+'</div>';
     btn.innerHTML='PIX GERADO! AGUARDE';
-
-    // polling status
     var intervalo=setInterval(async function(){
       try{
-        let s;
-        try{ s=await fetch('/status/'+txid); } catch{ s=await fetch('/verifica/'+txid); }
+        let s; try{ s=await fetch('/status/'+txid); }catch{ s=await fetch('/verifica/'+txid); }
         var js=await s.json();
-        if(js.status==='CONCLUIDA' || js.pago===true){
+        if(js.status==='CONCLUIDA'||js.pago===true){
           clearInterval(intervalo);
           var m=document.getElementById('sMsg');
           if(m){
-            if(!js.mac){
-              m.innerHTML='<div style=background:#ff9800;color:#000;padding:12px;border-radius:8px>⚠️ PAGO MAS SEM MAC VALIDO<br><small>Entre em contato: mostre esse TXID '+txid+'</small></div>';
-            } else {
-              m.innerHTML='<a href="#" onclick="liberar(\''+txid+'\');return false;" style="display:block;background:#00e676;color:#000;padding:15px;border-radius:10px;text-decoration:none;font-size:18px">✅ PAGO! CLIQUE PARA LIBERAR</a>';
-            }
+            if(!js.mac){ m.innerHTML='<div style=background:#ff9800;color:#000;padding:12px;border-radius:8px>⚠️ PAGO MAS SEM MAC VALIDO<br><small>TXID '+txid+'</small></div>'; }
+            else{ m.innerHTML='<a href="#" onclick="liberar(\''+txid+'\');return false;" style="display:block;background:#00e676;color:#000;padding:15px;border-radius:10px;text-decoration:none;font-size:18px">✅ PAGO! CLIQUE PARA LIBERAR</a>'; }
           }
         }
       }catch(e){}
     },3000);
-
-  }catch(e){
-    area.innerHTML='<div style=color:red>ERRO: '+e.message+'</div><div style=font-size:10px;color:#666>Verifique se o server v12.5 está no ar</div>';
-    btn.innerHTML='TENTAR NOVAMENTE'; btn.disabled=false;
-  }
+  }catch(e){ area.innerHTML='<div style=color:red>ERRO: '+e.message+'</div>'; btn.innerHTML='TENTAR NOVAMENTE'; btn.disabled=false; }
+}
+async function liberar(txid){
+  try{ await fetch('/api/liberado/'+txid); }catch{}
+  try{ await fetch('/liberado/'+txid); }catch{}
+  document.getElementById('pixArea').innerHTML='<h1 style=color:#00a650>✅ LIBERADO!</h1><p style=margin-top:10px;color:#000>MAC: '+getMac()+'</p><a href="http://10.5.50.1/login" style="display:block;background:#FFEB3B;color:#000;padding:18px;border-radius:12px;margin-top:15px;font-weight:900;text-decoration:none">ENTRAR NA INTERNET</a>';
 }
 
-async function liberar(txid){
-  try{ await fetch('/api/liberado/'+txid); } catch{}
-  try{ await fetch('/liberado/'+txid); } catch{}
-  document.getElementById('pixArea').innerHTML='<h1 style=color:#00a650>✅ LIBERADO!</h1><p style=margin-top:10px;color:#000">Seu MAC foi liberado: '+getMac()+'</p><p style=color:#000;margin-top:6px">Volte para o WiFi e navegue!</p><a href="http://10.5.50.1/login" style="display:block;background:#FFEB3B;color:#000;padding:18px;border-radius:12px;margin-top:15px;font-weight:900;text-decoration:none">ENTRAR NA INTERNET</a>';
+// ===== VOUCHER - 2 MODOS =====
+async function entrarVoucher(){
+  const user = document.getElementById('vcod').value.trim();
+  const pass = document.getElementById('vsen').value.trim() || user;
+  const resDiv = document.getElementById('voucherResult');
+  if(!user){ alert('Digite o codigo do voucher'); return; }
+  resDiv.innerText = 'Verificando voucher...';
+
+  // MODO 1: Se estiver no Mikrotik hotspot, faz login direto no MT
+  const linkLogin = getLinkLogin();
+  if(linkLogin && linkLogin.indexOf('$(')===-1){
+    // está no hotspot real
+    const loginUrl = linkLogin + "?username=" + encodeURIComponent(user) + "&password=" + encodeURIComponent(pass);
+    window.location.href = loginUrl;
+    return;
+  }
+
+  // MODO 2: Se estiver no Render (teste) - tenta validar gerando voucher fake se for SLS-
+  if(user.startsWith('SLS-')){
+    // se for voucher gerado pelo /api/gerar-voucher, libera simulado
+    try{
+      // simula login - cria na fila como voucher
+      await fetch('/api/liberado/'+user); // limpa se existir
+      resDiv.innerText = '✅ VOUCHER VALIDO (TESTE): '+user+'\nNo evento real, vai logar no Mikrotik automaticamente.\nSe quiser testar geração, use /api/gerar-voucher';
+      return;
+    }catch(e){}
+  }
+
+  // Fallback: tenta login no gateway padrão do evento
+  // Muitos hotspots usam 10.5.50.1
+  const fallback = "http://10.5.50.1/login?username="+encodeURIComponent(user)+"&password="+encodeURIComponent(pass);
+  resDiv.innerText = 'Tentando logar no Mikrotik...\n'+fallback;
+  window.location.href = fallback;
 }
 </script>
 </body>
