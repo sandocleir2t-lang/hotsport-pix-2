@@ -62,19 +62,29 @@ try {
   if (certFinal) {
     efi = new EfiPay({ sandbox: false, client_id: process.env.EFI_CLIENT_ID, client_secret: process.env.EFI_CLIENT_SECRET, certificate: certFinal });
     console.log('CERT OK - EFI CONFIGURADO - QR FUNCIONANDO');
+  } else {
+    console.log('CERT NAO ENCONTRADO - MODO MOCK ATIVO');
   }
 } catch(err){ console.log('EFI INIT ERROR', err.message); }
 
-console.log('SLS v12.5.4 FINAL RAPIDO - QR + VOUCHER FIX');
+console.log('SLS v13.2 FINAL - QR + VOUCHER FIX + /api/gerar-qrcode');
 
-// ROTAS - VOLTA AO RAPIDO QUE FUNCIONAVA EM 26/07
+// ROTAS RAPIDAS 26/07
 app.get('/api/liberacoes', (req, res) => { 
-  // APENAS PAGO_LIBERAR - esse era o que liberava rapido em 60s
   const pagos = fila.filter(f=>f.status==='PAGO_LIBERAR');
   res.json(pagos); 
 });
 app.get('/fila', (req, res) => { res.json(fila); });
-app.get('/api/fila', (req, res) => { res.json(fila); });
+app.get('/api/fila', (req, res) => { 
+  const { txid } = req.query;
+  if (txid) {
+    const item = fila.find(f=>f.txid===txid);
+    if (!item) return res.json({status:'NAO_ENCONTRADO'});
+    // compatibilidade para login novo que espera PAGO_LIBERAR
+    return res.json(item);
+  }
+  res.json(fila); 
+});
 app.get('/api/liberacoes/limpar', (req, res) => { liberacoes = []; fila=[]; salvarLibs(); res.send('LIMPO'); });
 
 function liberaPorTxid(detail) {
@@ -86,7 +96,6 @@ function liberaPorTxid(detail) {
       console.log(`PIX PAGO SEM MAC - TXID ${detail.txid}`);
       return null;
     }
-    // Limpa MAC antigo igual fazia em 26/07
     liberacoes = liberacoes.filter(l => (l.mac||'').toLowerCase() !== macInfo.toLowerCase());
     fila = fila.filter(l => (l.mac||'').toLowerCase() !== macInfo.toLowerCase() && l.txid !== detail.txid);
     const novo = { mac: macInfo, ip: ipInfo, tempo: tempoInfo, data: Date.now(), txid: detail.txid, status: 'PAGO_LIBERAR' };
@@ -98,29 +107,70 @@ function liberaPorTxid(detail) {
 
 async function handlerGerarPix(req, res){
   try {
-    const { valor, tempo, mac, ip } = req.body;
-    console.log(`GERAR PIX ${valor} ${tempo} ${mac}`);
-    if (!efi) return res.status(500).json({ erro: 'EFI nao configurado' });
-    const charge = await efi.pixCreateImmediateCharge({}, {
-      calendario: { expiracao: 3600 },
-      devedor: { cpf: '12345678909', nome: 'Cliente SLS WIFI' },
-      valor: { original: Number(valor).toFixed(2) },
-      chave: process.env.EFI_PIX_KEY,
-      solicitacaoPagador: `SLS WIFI ${tempo} - ${mac}`,
-      infoAdicionais: [{ nome: 'MAC', valor: mac||'semmac' }, { nome: 'IP', valor: ip||'' }, { nome: 'TEMPO', valor: String(tempo||'') }]
-    });
-    const qrcode = await efi.pixGenerateQRCode({ id: charge.loc.id });
-    fila.push({ txid: charge.txid, tempo: tempo, valor: valor, mac: mac||'semmac', status: 'AGUARDANDO', data: Date.now() });
+    // Aceita tanto body quanto query (para o login amarelo novo)
+    const valor = req.body.valor || req.query.valor || 3;
+    const tempo = req.body.tempo || req.query.tempo || '1 hora';
+    const mac = req.body.mac || req.query.mac || 'semmac';
+    const ip = req.body.ip || req.query.ip || '';
+    const plano = req.body.plano || req.query.plano || tempo;
+
+    console.log(`GERAR PIX ${valor} ${tempo} ${mac} plano=${plano}`);
+
+    let txid, qrcodeData, imagem;
+
+    if (!efi) {
+      // MODO MOCK - para testar sem certificado
+      txid = 'EFI-MOCK-' + Date.now();
+      const fakeBrcode = `00020126580014BR.GOV.BCB.PIX0136${txid}520400005303986540${Number(valor).toFixed(2)}5802BR5920SLS WIFI6009TERESINA62070503***6304ABCD`;
+      qrcodeData = fakeBrcode;
+      imagem = ''; // login vai usar qrserver
+      console.log(`QR MOCK GERADO ${txid} (EFI sem cert)`);
+    } else {
+      const charge = await efi.pixCreateImmediateCharge({}, {
+        calendario: { expiracao: 3600 },
+        devedor: { cpf: '12345678909', nome: 'Cliente SLS WIFI' },
+        valor: { original: Number(valor).toFixed(2) },
+        chave: process.env.EFI_PIX_KEY,
+        solicitacaoPagador: `SLS WIFI ${tempo} - ${mac}`,
+        infoAdicionais: [{ nome: 'MAC', valor: mac||'semmac' }, { nome: 'IP', valor: ip||'' }, { nome: 'TEMPO', valor: String(tempo||'') }]
+      });
+      const qrcode = await efi.pixGenerateQRCode({ id: charge.loc.id });
+      txid = charge.txid;
+      qrcodeData = qrcode.qrcode;
+      imagem = qrcode.imagemQrcode;
+      console.log(`QR GERADO OK ${txid}`);
+    }
+
+    const novoFila = { txid, tempo, valor, mac: mac||'semmac', status: 'AGUARDANDO', data: Date.now(), plano };
+    fila.push(novoFila);
     salvarLibs();
-    console.log(`QR GERADO OK ${charge.txid}`);
-    return res.json({ txid: charge.txid, qrcode: qrcode.qrcode, copiaecola: qrcode.qrcode, copia_e_cola: qrcode.qrcode, imagem: qrcode.imagemQrcode, imagemQrcode: qrcode.imagemQrcode });
+
+    // RETORNO COMPATIVEL COM TUDO: login antigo + login novo amarelo
+    return res.json({ 
+      txid, 
+      qrcode: imagem || '', 
+      brcode: qrcodeData,
+      // compatibilidade antiga
+      copiaecola: qrcodeData, 
+      copia_e_cola: qrcodeData, 
+      imagem: imagem, 
+      imagemQrcode: imagem,
+      valor: Number(valor),
+      tempo,
+      plano
+    });
   } catch (err) {
     console.error('ERRO GERAR PIX', err.message);
     return res.status(500).json({ erro: err.message });
   }
 }
+
+// ROTAS QUE FALTAVAM - CORREÇÃO DO 404
 app.post('/gerar', handlerGerarPix);
 app.post('/criar-pix', handlerGerarPix);
+app.post('/api/gerar-qrcode', handlerGerarPix);
+app.get('/api/gerar-qrcode', handlerGerarPix); // para teste via /tool fetch e navegador
+app.all('/api/gerar-qrcode', handlerGerarPix);
 
 app.post('/api/gerar-voucher', (req, res) => {
   try {
@@ -147,6 +197,12 @@ async function handlerVerifica(req,res){
   try {
     const { txid } = req.params;
     if (txid.startsWith('SLS-')) return res.json({ status: 'VOUCHER', pago: false, voucher: true });
+    if (!efi) {
+      // em modo mock, nunca paga sozinho, usa /api/pagar/:txid para simular
+      const item = fila.find(f=>f.txid===txid);
+      if (item && item.status==='PAGO_LIBERAR') return res.json({ status: 'CONCLUIDA', pago: true });
+      return res.json({ status: 'ATIVA', pago: false });
+    }
     const detail = await efi.pixDetailCharge({ txid });
     if (detail.status === 'CONCLUIDA') {
       const macLiberado = liberaPorTxid(detail);
@@ -157,6 +213,21 @@ async function handlerVerifica(req,res){
 }
 app.get('/verifica/:txid', handlerVerifica);
 app.get('/status/:txid', handlerVerifica);
+app.get('/api/verifica/:txid', handlerVerifica);
+app.get('/api/status/:txid', handlerVerifica);
+
+// Libera manualmente para teste
+app.get('/api/pagar/:txid', (req,res)=>{
+  const txid=req.params.txid;
+  const item=fila.find(f=>f.txid===txid);
+  if(item){
+    // simula pagamento aprovado da EFI
+    const detail={ txid, infoAdicionais:[{nome:'MAC',valor:item.mac},{nome:'TEMPO',valor:item.tempo},{nome:'IP',valor:''}] };
+    liberaPorTxid(detail);
+    return res.json({ok:true, msg:'PAGO_LIBERAR ativado'});
+  }
+  return res.status(404).json({error:'txid nao encontrado'});
+});
 
 app.get('/liberado/:txid',(req,res)=>{
   const txid = req.params.txid;
@@ -174,4 +245,4 @@ app.get('/api/liberado/:txid',(req,res)=>{
 app.get('/admin', (req,res)=>{ res.sendFile(path.join(__dirname, 'public', 'admin.html')); });
 app.use(express.static(path.join(__dirname, 'public')));
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => console.log(`SLS v12.5.4 RAPIDO RODANDO ${PORT} - QR OK`));
+app.listen(PORT, '0.0.0.0', () => console.log(`SLS v13.2 RAPIDO RODANDO ${PORT} - QR FIX /api/gerar-qrcode OK`));
