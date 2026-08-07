@@ -120,7 +120,7 @@ async function handlerGerarPix(req, res){
       valor: { original: Number(valor).toFixed(2) },
       chave: process.env.EFI_PIX_KEY,
       solicitacaoPagador: `SLS WIFI ${tempo} - ${mac}`,
-      infoAdicionais: [{ nome: 'MAC', valor: mac||'semmac' }, { nome: 'IP', valor: ip||'' }, { nome: 'TEMPO', valor: String(tempo||'') }]
+      infoAdicionais: [{ nome: 'MAC', valor: (mac||'semmac').substring(0,30) }, { nome: 'IP', valor: (ip||'192.168.88.1').substring(0,30) }, { nome: 'TEMPO', valor: String(tempo||'1h').substring(0,30) }]
     });
     const qrcode = await efi.pixGenerateQRCode({ id: charge.loc.id });
     fila.push({ txid: charge.txid, tempo: tempo, valor: valor, mac: mac||'semmac', status: 'AGUARDANDO', data: Date.now(), plano });
