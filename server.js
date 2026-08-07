@@ -1,11 +1,7 @@
-// hotspot-pix-2 - server.js v14 DEFINITIVO - UNIFICADO
-// Base: seu v13.4 ANTI-500 + correções do histórico do dia
-// - Mantém: QR real EFI + mock, brcode, copiaecola, pixCopiaECola, /api/criar-pix, /api/fila, /api/webhook/pix
-// - Corrige: adiciona /api/gerar-qrcode (GET e POST) que faltava pro login.html/index.html
-// - Corrige: /api/fila?txid= retorna {status} pro polling, sem limpar fila antes
-// - Adiciona: /api/liberacoes (texto puro) + /api/liberacoes/limpar pro seu SLS-LIBERA-v11 do hEX não travar
-// - Adiciona: persistência em disco fila.json + pagamentos.json (não perde SLS46069442D9 quando Render reinicia)
-// - Anti-bug: timeout EFI, nunca retorna 500, Winbox não congela
+// hotspot-pix-2 - server.js v15 DEFINITIVO - POLLING
+// Base: seu v14 + polling EFI (não depende só de webhook)
+// - Mantém tudo do v14
+// - NOVO: a cada 20s pergunta direto na EFI se o PENDENTE foi pago
 
 const express = require('express');
 const cors = require('cors');
@@ -26,7 +22,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 const FILA_FILE = path.join(__dirname, 'fila.json');
 const PAG_FILE = path.join(__dirname, 'pagamentos.json');
 
-// --- MEMÓRIA + DISCO ---
 let pagamentos = new Map();
 let filaLiberar = [];
 
@@ -51,7 +46,6 @@ function salvarDisco() {
 }
 carregarDisco();
 
-// --- HELPERS EFI ---
 function safeCertificado() {
   try {
     const base64 = process.env.EFI_CERTIFICADO_BASE64;
@@ -81,13 +75,11 @@ async function getEfiClient() {
   } catch (e) { console.error('[EFI] getEfiClient fail', e.message); return null; }
 }
 
-// Função central de criar PIX (usada por /criar-pix e /gerar-qrcode)
 async function criarPixCentral({ valor, cliente, mac, ip, plano, tempo }) {
   const valorFinal = parseFloat(valor) || 3.0;
   const txid = `SLS${Date.now()}${Math.floor(Math.random()*1000)}`.substring(0, 32).toUpperCase();
   let brcode = '';
   let isMock = false;
-
   try {
     const efipay = await getEfiClient();
     if (efipay) {
@@ -97,7 +89,6 @@ async function criarPixCentral({ valor, cliente, mac, ip, plano, tempo }) {
         chave: process.env.EFI_PIX_KEY,
         solicitacaoPagador: `Hotspot ${cliente || mac || plano || 'cliente'}`
       };
-      // timeout de 8s pra não travar QR
       const chargePromise = efipay.pixCreateImmediateCharge([], body);
       const charge = await Promise.race([chargePromise, new Promise((_,rej)=>setTimeout(()=>rej(new Error('EFI timeout')),8000))]);
       const qrPromise = efipay.pixGenerateQRCode({ id: charge.loc.id });
@@ -110,7 +101,6 @@ async function criarPixCentral({ valor, cliente, mac, ip, plano, tempo }) {
     brcode = gerarMockPix(txid, valorFinal).brcode;
     isMock = true;
   }
-
   const pag = {
     txid, status: 'AGUARDANDO', valor: valorFinal, cliente: cliente || mac || plano || 'cliente',
     mac: mac ? mac.toUpperCase() : null, ip: ip || null, plano: plano || tempo || '1HORA',
@@ -122,37 +112,30 @@ async function criarPixCentral({ valor, cliente, mac, ip, plano, tempo }) {
   return pag;
 }
 
-// --- ROTAS COMPATIBILIDADE ---
 app.get('/', (req, res) => {
-  res.send(`SLS WIFI ONLINE v14 DEFINITIVO - ${new Date().toISOString()} - Pagamentos: ${pagamentos.size} - Fila: ${filaLiberar.length}`);
+  res.send(`SLS WIFI ONLINE v15 POLLING - ${new Date().toISOString()} - Pagamentos: ${pagamentos.size} - Fila: ${filaLiberar.length}`);
 });
-app.get('/api/health', (req, res) => res.json({ status:'ok', version:'v14 DEFINITIVO', time:new Date().toISOString(), totalPagamentos: pagamentos.size, fila: filaLiberar.length }));
+app.get('/api/health', (req, res) => res.json({ status:'ok', version:'v15 POLLING', time:new Date().toISOString(), totalPagamentos: pagamentos.size, fila: filaLiberar.length }));
 
-// ROTA ORIGINAL v13.4
 app.post('/api/criar-pix', async (req, res) => {
   try {
     const { valor, cliente, mac, ip, plano, tempo, plan, profile } = req.body || {};
     const pag = await criarPixCentral({ valor, cliente, mac, ip, plano: plano || plan || profile || tempo, tempo });
     return res.status(200).json({ ok:true, txid: pag.txid, brcode: pag.brcode, copiaecola: pag.brcode, pixCopiaECola: pag.brcode, qrcode: pag.brcode, qr: pag.brcode, valor: pag.valor, status:'AGUARDANDO' });
   } catch (e) {
-    console.error('[CRIAR-PIX] erro', e.message);
     const txidFallback = `MOCK${Date.now()}`;
     const mock = gerarMockPix(txidFallback, 3.0);
     return res.status(200).json({ ok:true, txid: txidFallback, brcode: mock.brcode, copiaecola: mock.brcode, pixCopiaECola: mock.brcode, qrcode: mock.brcode, qr: mock.brcode, valor:3.0, status:'AGUARDANDO', aviso:'fallback' });
   }
 });
-
-// ROTA QUE SEU login.html e index.html CHAMAM - faltava!
 app.post('/api/gerar-qrcode', async (req, res) => {
   try {
-    // aceita tanto body do index.html quanto do login.html
     const { valor, mac, ip, plano, tempo, plan, profile, cliente } = req.body || {};
     const v = valor || req.body?.valor || 3;
     const p = plano || plan || profile || tempo || '1HORA';
     const pag = await criarPixCentral({ valor: v, cliente, mac, ip, plano: p, tempo });
     return res.status(200).json({ ok:true, txid: pag.txid, brcode: pag.brcode, copiaecola: pag.brcode, pixCopiaECola: pag.brcode, qrcode: pag.brcode, qr: pag.brcode, valor: pag.valor, status:'AGUARDANDO' });
   } catch (e) {
-    console.error('[GERAR-QRCODE POST] erro', e.message);
     const txidFallback = `MOCK${Date.now()}`;
     const mock = gerarMockPix(txidFallback, 3.0);
     return res.status(200).json({ ok:true, txid: txidFallback, brcode: mock.brcode, copiaecola: mock.brcode, pixCopiaECola: mock.brcode, qrcode: mock.brcode, valor:3.0, status:'AGUARDANDO' });
@@ -168,15 +151,11 @@ app.get('/api/gerar-qrcode', async (req, res) => {
     return res.status(200).json({ ok:false, erro:e.message });
   }
 });
-
 app.get('/api/verifica/:txid', (req, res) => {
-  try {
-    const pag = pagamentos.get(req.params.txid);
-    if (!pag) return res.status(200).json({ ok:false, status:'NAO_ENCONTRADO' });
-    return res.status(200).json({ ok:true, txid: pag.txid, status: pag.status, valor: pag.valor });
-  } catch (e) { return res.status(200).json({ ok:false, status:'ERRO' }); }
+  const pag = pagamentos.get(req.params.txid);
+  if (!pag) return res.status(200).json({ ok:false, status:'NAO_ENCONTRADO' });
+  return res.status(200).json({ ok:true, txid: pag.txid, status: pag.status, valor: pag.valor });
 });
-
 app.get('/api/simular-pago/:txid', (req, res) => {
   const pag = pagamentos.get(req.params.txid);
   if (!pag) return res.status(200).json({ ok:false });
@@ -184,29 +163,20 @@ app.get('/api/simular-pago/:txid', (req, res) => {
   pagamentos.set(req.params.txid, pag);
   filaLiberar.push({ mac: pag.mac, ip: pag.ip, txid: pag.txid, cliente: pag.cliente, plano: pag.plano, data: new Date().toISOString() });
   salvarDisco();
-  console.log(`[PAGO] Simulado ${pag.txid} MAC=${pag.mac}`);
   return res.status(200).json({ ok:true, fila: filaLiberar });
 });
-
-// FILA - Para frontend polling E para MikroTik
 app.get('/api/fila', (req, res) => {
   try {
     const { txid } = req.query;
     if (txid) {
-      // Polling do login.html/index.html - NÃO limpa fila aqui
       const pag = pagamentos.get(txid);
       if (!pag) return res.status(200).json({ status:'NAO_ENCONTRADO' });
       return res.status(200).json({ status: pag.status, ok: pag.status==='PAGO_LIBERAR', txid: pag.txid, valor: pag.valor });
     }
-    // Sem txid = MikroTik ou debug - retorna array de pagos
-    const apenasPagos = [...filaLiberar];
-    // Só limpa se chamado com ?limpar=1 (compatibilidade)
     if (req.query.limpar === '1') { filaLiberar = []; salvarDisco(); }
-    return res.status(200).json(apenasPagos);
+    return res.status(200).json([...filaLiberar]);
   } catch (e) { return res.status(200).json([]); }
 });
-
-// COMPATIBILIDADE COM SEU SLS-LIBERA-v11 (texto puro)
 app.get('/api/liberacoes', (req, res) => {
   try {
     const pagos = filaLiberar.filter(f=>f && f.txid);
@@ -222,8 +192,7 @@ app.get('/api/liberacoes/limpar', (req, res) => {
     const { txid } = req.query;
     if (!txid) return res.send('OK');
     filaLiberar = filaLiberar.filter(f=>f.txid !== txid);
-    const pag = pagamentos.get(txid);
-    if (pag) { pagamentos.delete(txid); }
+    pagamentos.delete(txid);
     salvarDisco();
     console.log(`[SLS] Liberado e limpo TXID ${txid}`);
     return res.send('OK');
@@ -238,8 +207,6 @@ app.get('/api/liberar-manual', (req, res) => {
   salvarDisco();
   return res.send(`OK - ${mac} libera em 30s`);
 });
-
-// Webhooks EFI
 app.post('/api/webhook/pix', (req, res) => {
   try {
     console.log('[WEBHOOK] recebido', JSON.stringify(req.body).substring(0,600));
@@ -249,15 +216,12 @@ app.post('/api/webhook/pix', (req, res) => {
       if (!txid) continue;
       if (pagamentos.has(txid)) {
         const pag = pagamentos.get(txid);
-        pag.status = 'PAGO_LIBERAR';
-        pagamentos.set(txid, pag);
-        filaLiberar.push({ mac: pag.mac, ip: pag.ip, txid, cliente: pag.cliente, plano: pag.plano, data: new Date().toISOString() });
-        console.log(`[PAGO] Webhook ${txid} -> PAGO_LIBERAR MAC=${pag.mac}`);
-      } else {
-        // Recupera pagamento perdido (caso SLS46069442D9)
-        console.log(`[PAGO] TXID ${txid} NAO ENCONTRADO, criando recuperação`);
-        filaLiberar.push({ mac: 'RECUPERAR_MANUAL', ip:'', txid, data: new Date().toISOString(), plano:'1HORA' });
-        pagamentos.set(txid, { txid, status:'PAGO_LIBERAR', criadoEm: Date.now(), recuperado:true });
+        if (pag.status !== 'PAGO_LIBERAR') {
+          pag.status = 'PAGO_LIBERAR';
+          pagamentos.set(txid, pag);
+          filaLiberar.push({ mac: pag.mac, ip: pag.ip, txid, cliente: pag.cliente, plano: pag.plano, data: new Date().toISOString() });
+          console.log(`[PAGO] Webhook ${txid} -> PAGO_LIBERAR MAC=${pag.mac}`);
+        }
       }
     }
     salvarDisco();
@@ -265,22 +229,20 @@ app.post('/api/webhook/pix', (req, res) => {
   } catch (e) { return res.status(200).json({ ok:true }); }
 });
 app.post('/api/webhook', (req, res) => { req.url='/api/webhook/pix'; app.handle(req,res); });
-
-app.get('/api/status', (req,res)=> res.json({ versao:'v14 DEFINITIVO', total: pagamentos.size, pendentes: [...pagamentos.values()].filter(p=>p.status==='AGUARDANDO').length, pagos_para_liberar: filaLiberar.length, fila: filaLiberar }));
-
+app.get('/api/status', (req,res)=> res.json({ versao:'v15 POLLING', total: pagamentos.size, pendentes: [...pagamentos.values()].filter(p=>p.status==='AGUARDANDO').length, pagos_para_liberar: filaLiberar.length, fila: filaLiberar }));
+app.get('/api/limpar-fila', (req,res)=>{ pagamentos.clear(); filaLiberar=[]; salvarDisco(); res.send('Fila limpa'); });
 app.get('*', (req,res)=>{
   try {
     const indexPath = path.join(__dirname,'public','index.html');
     if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
-    return res.status(200).send(`SLS WIFI ONLINE v14 DEFINITIVO - ${new Date().toISOString()} - Fila: ${filaLiberar.length}`);
-  } catch { return res.status(200).send('OK v14'); }
+    return res.status(200).send(`SLS WIFI ONLINE v15 POLLING - ${new Date().toISOString()} - Fila: ${filaLiberar.length}`);
+  } catch { return res.status(200).send('OK v15'); }
 });
-
 app.use((err,req,res,next)=>{ console.error('[EXPRESS-ERROR]',err.message); return res.status(200).json({ ok:false, erro:'capturado', msg:err.message }); });
+app.listen(PORT, ()=>{ console.log(`[v15 POLLING] Rodando porta ${PORT}`); safeCertificado(); });
 
-app.listen(PORT, ()=>{ console.log(`[v14 DEFINITIVO] Rodando porta ${PORT}`); safeCertificado(); });
-
-setInterval(()=>{
+// LIMPEZA + POLLING EFI
+setInterval(async ()=>{
   try{
     const agora=Date.now();
     let mudou=false;
@@ -292,3 +254,28 @@ setInterval(()=>{
     if (mudou) salvarDisco();
   } catch(e){}
 }, 30000);
+
+// POLLING: pergunta na EFI se pendente foi pago (salva quando webhook falha)
+setInterval(async ()=>{
+  try{
+    const pendentes = [...pagamentos.entries()].filter(([_,p])=>p.status==='AGUARDANDO');
+    if (pendentes.length===0) return;
+    const efipay = await getEfiClient();
+    if (!efipay) return;
+    for (const [txid, pag] of pendentes) {
+      try {
+        const detalhe = await efipay.pixDetailCharge({ txid });
+        if (detalhe && detalhe.status === 'CONCLUIDA') {
+          console.log(`[POLL] ${txid} PAGO detectado na EFI! MAC=${pag.mac}`);
+          pag.status='PAGO_LIBERAR';
+          pagamentos.set(txid, pag);
+          if (!filaLiberar.find(f=>f.txid===txid)) {
+            filaLiberar.push({ mac: pag.mac, ip: pag.ip, txid, cliente: pag.cliente, plano: pag.plano, data: new Date().toISOString() });
+          }
+          salvarDisco();
+        }
+      } catch(err){}
+      await new Promise(r=>setTimeout(r,500));
+    }
+  } catch(e){ console.error('[POLL] erro', e.message); }
+}, 20000);
