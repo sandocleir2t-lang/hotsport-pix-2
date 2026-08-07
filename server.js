@@ -43,7 +43,7 @@ try {
   }
 } catch (err) { console.log('CERT ERROR', err.message); }
 
-console.log('SLS v12.3 FINAL COM /fila + WEBHOOK');
+console.log('SLS v12.4 FINAL FIX - QR + VOUCHER CORRIGIDO');
 
 app.get('/api/liberacoes', (req, res) => { res.json(liberacoes); });
 app.get('/fila', (req, res) => { res.json(liberacoes); });
@@ -54,39 +54,76 @@ app.get('/api/liberacoes/limpar', (req, res) => {
   res.send('LIBERACOES LIMPAS!');
 });
 
+// --- FUNCAO SEGURA - NAO CRIA LIXO NO hEX ---
 function liberaPorTxid(detail) {
   try {
     const macInfo = detail.infoAdicionais?.find(i => i.nome === 'MAC' || i.nome === 'mac')?.valor;
     const tempoInfo = detail.infoAdicionais?.find(i => i.nome === 'TEMPO' || i.nome === 'tempo')?.valor || '1h';
     const ipInfo = detail.infoAdicionais?.find(i => i.nome === 'IP' || i.nome === 'ip')?.valor || '';
-    if (!macInfo || macInfo === 'semmac' || macInfo.includes('00:00:00:00')) return null;
+    
+    // FIX v12.4: Se nao tem MAC valido, NAO libera, mas NAO quebra o QR
+    // Isso impede criar user SLS-PIX 3606b89... no hEX
+    if (!macInfo || macInfo === 'semmac' || macInfo.toLowerCase().includes('00:00:00') || macInfo.length > 18) {
+      console.log(`PIX PAGO MAS SEM MAC VALIDO - NAO LIBERANDO NA FILA (evita lixo). TXID ${detail.txid} mac=${macInfo}`);
+      return null;
+    }
     liberacoes = liberacoes.filter(l => l.mac.toLowerCase() !== macInfo.toLowerCase());
     liberacoes.push({ mac: macInfo, ip: ipInfo, tempo: tempoInfo, data: Date.now(), txid: detail.txid });
     salvarLibs();
     console.log(`PIX PAGO DETECTADO - LIBERADO ${macInfo} ${tempoInfo} via TXID ${detail.txid}`);
     return macInfo;
-  } catch (e) { return null; }
+  } catch (e) { 
+    console.log('ERRO liberaPorTxid', e.message);
+    return null; 
+  }
 }
 
 app.post('/gerar', async (req, res) => {
   try {
     const { valor, tempo, mac, ip } = req.body;
-    console.log(`GERAR PIX valor=${valor} tempo=${tempo} mac=${mac}`);
+    console.log(`GERAR PIX valor=${valor} tempo=${tempo} mac=${mac} ip=${ip}`);
     const valorNum = Number(valor);
-    if (!efi) return res.status(500).json({ error: 'EFI nao configurado' });
+    if (!efi) {
+      console.log('ERRO: EFI nao configurado - verifique certs/*.p12 e EFI_CLIENT_ID');
+      return res.status(500).json({ error: 'EFI nao configurado - sem certificado' });
+    }
     const body = {
       calendario: { expiracao: 3600 },
       devedor: { cpf: '12345678909', nome: 'Cliente SLS WIFI' },
       valor: { original: valorNum.toFixed(2) },
       chave: process.env.EFI_PIX_KEY,
       solicitacaoPagador: `SLS WIFI ${tempo} - ${mac}`,
-      infoAdicionais: [{ nome: 'MAC', valor: mac || 'semmac' }, { nome: 'IP', valor: ip || '' }, { nome: 'TEMPO', valor: tempo || '' }]
+      infoAdicionais: [
+        { nome: 'MAC', valor: mac || 'semmac' }, 
+        { nome: 'IP', valor: ip || '' }, 
+        { nome: 'TEMPO', valor: tempo || '' }
+      ]
     };
     const charge = await efi.pixCreateImmediateCharge({}, body);
     const qrcode = await efi.pixGenerateQRCode({ id: charge.loc.id });
+    console.log(`QR GERADO OK TXID ${charge.txid}`);
     return res.json({ txid: charge.txid, qrcode: qrcode.qrcode, copiaecola: qrcode.qrcode, imagem: qrcode.imagemQrcode });
   } catch (err) {
-    return res.status(500).json({ error: 'ERRO GERAR PIX', detalhe: err.message });
+    console.error('ERRO GERAR PIX', err);
+    return res.status(500).json({ error: 'ERRO GERAR PIX', detalhe: err.message, stack: err.stack?.slice(0,500) });
+  }
+});
+
+// --- NOVA ROTA - GERA VOUCHER EVENTO SEM PIX (NAO CRIA LIXO) ---
+app.post('/api/gerar-voucher', (req, res) => {
+  try {
+    const { tempo, qtd } = req.body;
+    const quantidade = Number(qtd) || 1;
+    const tempoFinal = tempo || 'EVENTO';
+    const vouchers = [];
+    for (let i = 0; i < quantidade; i++) {
+      const codigo = 'SLS-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+      vouchers.push({ user: codigo, senha: codigo, perfil: tempoFinal, codigo });
+    }
+    console.log(`VOUCHER GERADO ${quantidade}x ${tempoFinal}`);
+    return res.json({ ok: true, vouchers });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 
@@ -122,4 +159,4 @@ app.post('/webhook', async (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => console.log(`SLS v12.3 RODANDO PORTA ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`SLS v12.4 RODANDO PORTA ${PORT} - QR + VOUCHER FIX`));
