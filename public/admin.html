@@ -3,40 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SLS - ADMIN VOUCHERS v12.5.3</title>
+<title>SLS - ADMIN OFFLINE v12.5.3.2</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:Consolas,monospace}
 body{background:#0a0a0f;color:#cdd6f4;min-height:100vh}
 .header{background:#16161a;border-bottom:1px solid #2a2a32;padding:16px 20px;display:flex;justify-content:space-between;align-items:center}
-.header h1{font-size:16px;letter-spacing:2px}
-.btnTop{padding:8px 14px;border-radius:8px;border:0;font-weight:800;cursor:pointer;margin-left:8px}
-.btnCopy{background:#2a2a32;color:#fff}
-.btnPrint{background:#00e676;color:#000}
 .wrap{max-width:900px;margin:20px auto;padding:0 16px}
 .card{background:#16161a;border:1px solid #2a2a32;border-radius:16px;padding:18px;margin-bottom:16px}
-.card h2{font-size:13px;color:#888;margin-bottom:12px;letter-spacing:1px}
+.card h2{font-size:13px;color:#888;margin-bottom:12px}
 .row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .row input,.row select{background:#0f0f12;border:1px solid #2a2a32;color:#fff;padding:12px;border-radius:10px;font-size:14px;flex:1;min-width:120px}
-.btnGen{width:100%;background:#FFEB3B;color:#000;border:0;padding:16px;border-radius:12px;font-weight:900;font-size:15px;cursor:pointer;margin-top:6px}
-.term{background:#0f0f12;border:1px solid #222;border-radius:16px;padding:0;overflow:hidden}
-.termTop{background:#1e1e28;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #222}
-.termTop span{color:#666;font-size:12px}
-pre{padding:16px;font-size:13px;line-height:1.6;color:#a6adc8;white-space:pre-wrap;word-break:break-all;max-height:60vh;overflow:auto}
+.btnGen{width:100%;background:#FFEB3B;color:#000;border:0;padding:16px;border-radius:12px;font-weight:900;font-size:15px;cursor:pointer}
+.term{background:#0f0f12;border:1px solid #222;border-radius:16px;overflow:hidden}
+.termTop{background:#1e1e28;padding:10px 14px;display:flex;justify-content:space-between;border-bottom:1px solid #222}
+pre{padding:16px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;max-height:60vh;overflow:auto}
 .cmd{color:#89b4fa} .name{color:#f9e2af;font-weight:900}
-@media print{ .header,.card{ display:none } .term{ border:0 } pre{ font-size:10px } }
+.btnTop{padding:8px 14px;border-radius:8px;border:0;font-weight:800;cursor:pointer;margin-left:8px}
+.btnCopy{background:#2a2a32;color:#fff} .btnPrint{background:#00e676;color:#000}
 </style>
 </head>
 <body>
 <div class="header">
-<div><b>>_ COMANDOS MIKROTIK</b> <small style="color:#555">v12.5.3 ADMIN</small></div>
-<div>
-<button class="btnTop btnCopy" onclick="copiar()">📋 Copiar Tudo</button>
-<button class="btnTop btnPrint" onclick="window.print()">🖨️ Imprimir</button>
-</div>
+<div><b>>_ COMANDOS MIKROTIK</b> <small style="color:#555">v12.5.3.2 OFFLINE - FUNCIONA SEM RENDER</small></div>
+<div><button class="btnTop btnCopy" onclick="copiar()">📋 Copiar</button><button class="btnTop btnPrint" onclick="window.print()">🖨️ Imprimir</button></div>
 </div>
 <div class="wrap">
 <div class="card">
-<h2>GERADOR DE VOUCHERS EVENTO</h2>
+<h2>GERADOR DE VOUCHERS EVENTO - OFFLINE</h2>
 <div class="row">
 <input id="qtd" type="number" value="2" min="1" max="200">
 <select id="perfil"><option>EVENTO</option><option>1h</option><option>2h</option><option>8h</option><option>EVENTO_VIP</option></select>
@@ -46,41 +39,38 @@ pre{padding:16px;font-size:13px;line-height:1.6;color:#a6adc8;white-space:pre-wr
 <select id="server"><option>hotspot1</option><option>all</option></select>
 <input id="uptime" value="08:00:00">
 </div>
-<button class="btnGen" onclick="gerar()">GERAR COMANDOS MIKROTIK</button>
-<div id="status" style="font-size:11px;color:#666;text-align:center;margin-top:8px"></div>
+<button class="btnGen" onclick="gerar()">GERAR COMANDOS MIKROTIK (OFFLINE)</button>
+<div id="status" style="font-size:11px;color:#00e676;text-align:center;margin-top:8px">✅ Modo OFFLINE - não precisa do Render</div>
 </div>
 <div class="term">
 <div class="termTop"><span>/ip hotspot user add ...</span><span id="count">0 vouchers</span></div>
-<pre id="out">Clique em GERAR...
-Ex: /ip hotspot user add name=SLS-EDQ5 password=I82NF2 profile=EVENTO limit-uptime=08:00:00 server=hotspot1 comment="SLS-V99-EVENTO - 06/08/2026"</pre>
+<pre id="out">Clique em GERAR...</pre>
 </div>
 </div>
 <script>
-let lastComandos=[];
-async function gerar(){
-  const qtd=document.getElementById('qtd').value||2;
-  const perfil=document.getElementById('perfil').value;
-  const evento=document.getElementById('evento').value;
-  const server=document.getElementById('server').value;
-  const uptime=document.getElementById('uptime').value;
-  const out=document.getElementById('out');
-  const st=document.getElementById('status');
-  out.textContent='Gerando...'; st.textContent='POST /api/gerar-voucher';
-  try{
-    const r=await fetch('/api/gerar-voucher',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({qtd,perfil,evento,server,uptime})});
-    if(!r.ok) throw new Error('HTTP '+r.status+' - '+await r.text());
-    const j=await r.json();
-    if(!j.comandos) throw new Error('Sem comandos: '+JSON.stringify(j));
-    lastComandos=j.comandos;
-    document.getElementById('count').innerText=lastComandos.length+' vouchers';
-    out.innerHTML=lastComandos.map(l=>l.replace(/(name=SLS-[A-Z0-9]+)/,'<span class="name">$1</span>').replace(/\/ip hotspot user add/,'<span class="cmd">/ip hotspot user add</span>')).join('\n');
-    st.textContent='✅ OK';
-  }catch(e){ out.textContent='ERRO: '+e.message+'\n\nDica: Recarrega a página e tenta de novo. Se estiver abrindo pelo IP do Mikrotik (10.5.50.1), abre pelo https://hotsport-pix-2.onrender.com/admin'; st.textContent='❌ Falha'; console.error(e); }
+let last=[]
+function gerar(){
+  const qtd=parseInt(document.getElementById('qtd').value)||2
+  const perfil=document.getElementById('perfil').value
+  const evento=document.getElementById('evento').value||`SLS-V99-${perfil} - ${new Date().toLocaleDateString('pt-BR')}`
+  const server=document.getElementById('server').value
+  const uptime=document.getElementById('uptime').value
+  const out=document.getElementById('out')
+  last=[]
+  for(let i=0;i<qtd;i++){
+    const suffix=Math.random().toString(36).substring(2,6).toUpperCase()
+    const pass=Math.random().toString(36).substring(2,8).toUpperCase()
+    const codigo='SLS-'+suffix
+    last.push(`/ip hotspot user add name=${codigo} password=${pass} profile=${perfil} limit-uptime=${uptime} server=${server} comment="${evento}"`)
+  }
+  document.getElementById('count').innerText=last.length+' vouchers'
+  out.innerHTML=last.map(l=>l.replace(/(name=SLS-[A-Z0-9]+)/,'<span class="name">$1</span>').replace(/\/ip hotspot user add/,'<span class="cmd">/ip hotspot user add</span>')).join('\n')
 }
 function copiar(){
-  if(!lastComandos.length){ alert('Gere primeiro!'); return; }
-  navigator.clipboard.writeText(lastComandos.join('\n')).then(()=>alert('✅ '+lastComandos.length+' copiados!'));
+  if(!last.length){alert('Gere primeiro');return}
+  navigator.clipboard.writeText(last.join('\n')).then(()=>alert('✅ '+last.length+' copiados!'))
 }
+gerar()
 </script>
 </body>
 </html>
