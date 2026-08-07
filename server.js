@@ -1,9 +1,8 @@
-// server.js v12.5.6 CLEAN LOG - SLS EVENTO
+// server.js v12.5.7 FINAL - FIX LOG + FIX QR
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -14,18 +13,17 @@ const FILA_PATH = path.join(__dirname, 'fila.json');
 let fila = [];
 try{
   if(fs.existsSync(FILA_PATH)){
-    fila = JSON.parse(fs.readFileSync(FILA_PATH,'utf8') || '[]');
+    fila = JSON.parse(fs.readFileSync(FILA_PATH,'utf8')||'[]');
   }
-}catch(e){
-  fila = [];
-}
+}catch(e){ fila=[]; }
 
-// SALVA SEM FLOODAR LOG
+// --- FIX 1: LOG SEM FLOOD ---
 function salvarFila(){
   try{
     fs.writeFileSync(FILA_PATH, JSON.stringify(fila,null,2));
-    if(fila.length > 0){
-      console.log(`FILA SALVA total=${fila.length} PAGO_LIBERAR=${fila.filter(f=>f.status==='PAGO_LIBERAR').length} AGUARDANDO=${fila.filter(f=>f.status==='AGUARDANDO').length}`);
+    // só loga se tiver alguém, se total=0 fica quieto
+    if(fila.length>0){
+      console.log(` FILA SALVA total=${fila.length} PAGO_LIBERAR=${fila.filter(f=>f.status==='PAGO_LIBERAR').length} AGUARDANDO=${fila.filter(f=>f.status==='AGUARDANDO').length}`);
     }
   }catch(e){
     console.log('ERRO SALVAR FILA', e.message);
@@ -33,176 +31,129 @@ function salvarFila(){
 }
 
 function gerarVoucher(){
-  const n = Math.floor(1000 + Math.random()*9000);
-  return `SLS-${n}`;
+  return `SLS-${Math.floor(1000+Math.random()*9000)}`;
 }
 
-// EFÍ CONFIG
-let EfiPay = null;
-try{
-  EfiPay = require('sdk-node-apis-efi').default;
-}catch(e){
+// --- EFI ---
+let EfiPay;
+try{ EfiPay = require('sdk-node-apis-efi').default || require('sdk-node-apis-efi'); }catch(e){}
+
+function getEfi(){
+  if(!EfiPay) return null;
+  // Suporta os 2 nomes de env que vc usa
+  const certB64 = process.env.EFI_CERT_BASE64 || process.env.EFI_CERTIFICATE_BASE64 || process.env.EFI_CERT_P12_BASE64;
+  if(!certB64) { console.log('SEM CERT B64'); return null; }
   try{
-    EfiPay = require('sdk-node-apis-efi');
-  }catch(e2){}
+    const cert = Buffer.from(certB64,'base64');
+    return new EfiPay({
+      sandbox: false,
+      client_id: process.env.EFI_CLIENT_ID,
+      client_secret: process.env.EFI_CLIENT_SECRET,
+      certificate: cert,
+      certBase64: false
+    });
+  }catch(e){ console.log('ERRO EFI CLIENT', e.message); return null; }
 }
 
-const EFI_CERT = process.env.EFI_CERT_BASE64? Buffer.from(process.env.EFI_CERT_BASE64, 'base64') : null;
-
-function getEfiClient(){
-  if(!EfiPay ||!EFI_CERT) return null;
-  const options = {
-    sandbox: false,
-    client_id: process.env.EFI_CLIENT_ID,
-    client_secret: process.env.EFI_CLIENT_SECRET,
-    certificate: EFI_CERT,
-    certBase64: false
-  };
-  return new EfiPay(options);
-}
-
-// 1. CRIAR PIX
+// CRIAR PIX - FIX 2: QR VOLTANDO
 app.post('/api/pix', async (req,res)=>{
   try{
     const { valor, plano, mac, ip, nome } = req.body;
-    if(!valor) return res.status(400).json({error:'valor obrigatorio'});
+    const client = getEfi();
 
-    const client = getEfiClient();
-    if(!client){
-      console.log('EFI SEM CLIENT - MOCK');
-      const voucher = gerarVoucher();
-      const item = {
-        id: Date.now().toString(),
-        status: 'AGUARDANDO',
-        valor: Number(valor),
-        plano: plano || '1H',
-        mac: (mac||'').toLowerCase(),
-        ip: ip || '',
-        nome: nome || '',
-        voucher,
-        criacao: new Date().toISOString()
-      };
-      fila.push(item);
-      salvarFila();
-      return res.json({ qrcode: '000201 MOCK', txid: item.id, voucher });
-    }
+    const voucher = gerarVoucher();
+    const valorFmt = Number(valor).toFixed(2);
 
-    const valorStr = Number(valor).toFixed(2);
+    // --- FIX QR: infoAdicionais nunca vazio e nunca maior que 2 itens ---
+    const infoAdicionais = [
+      { nome: 'Plano', valor: String(plano||'1H').substring(0,50) },
+      { nome: 'Voucher', valor: voucher }
+    ];
+
     const body = {
       calendario: { expiracao: 3600 },
-      devedor: { nome: nome || 'Cliente SLS' },
-      valor: { original: valorStr },
-      chave: process.env.EFI_PIX_KEY,
-      // FIX DO ERRO infoAdicionais[1].valor VAZIO
-      infoAdicionais: [
-        { nome: 'Plano', valor: String(plano||'1H') },
-        { nome: 'Voucher', valor: gerarVoucher() },
-        { nome: 'MAC', valor: String(mac||'').substring(0,20) || 'NAO_INFORMADO' }
-      ].filter(i=>i.valor && i.valor.trim()!== '')
+      valor: { original: valorFmt },
+      chave: process.env.EFI_PIX_KEY || process.env.PIX_KEY,
+      infoAdicionais,
+      solicitacaoPagador: `SLS ${plano||'WIFI'} ${voucher}`
     };
+
+    if(!client){
+      console.log(`MOCK PIX R$ ${valorFmt} ${voucher} IP ${ip}`);
+      const item = { id: Date.now().toString(), txid: Date.now().toString(), status:'AGUARDANDO', valor:Number(valor), plano, mac:(mac||'').toLowerCase(), ip: ip||'', nome: nome||'', voucher, criacao: new Date().toISOString(), qrcode: '00020101021226870014br.gov.bcb.pix MOCK' };
+      fila.push(item);
+      salvarFila();
+      return res.json({ qrcode: item.qrcode, txid: item.txid, voucher });
+    }
 
     const cob = await client.pixCreateImmediateCharge({}, body);
-    const qrcode = await client.pixGenerateQRCode({ id: cob.loc.id });
+    const qr = await client.pixGenerateQRCode({ id: cob.loc.id });
 
     const item = {
-      id: String(cob.txid || cob.txid),
+      id: String(cob.txid),
+      txid: String(cob.txid),
       locId: cob.loc.id,
-      txid: cob.txid,
       status: 'AGUARDANDO',
       valor: Number(valor),
-      plano: plano || '1H',
+      plano: plano||'1H',
       mac: (mac||'').toLowerCase(),
-      ip: ip || '',
-      nome: nome || '',
-      voucher: body.infoAdicionais.find(i=>i.nome==='Voucher')?.valor || gerarVoucher(),
+      ip: ip||'',
+      nome: nome||'',
+      voucher,
       criacao: new Date().toISOString(),
-      qrcode: qrcode.qrcode
+      qrcode: qr.qrcode
     };
-
     fila.push(item);
     salvarFila();
 
-    console.log(`PIX GERADO R$ ${valorStr} Plano ${plano} IP ${ip} MAC ${mac}`);
-
-    return res.json({ qrcode: qrcode.qrcode, qrcodeImage: qrcode.imagemQrcode, txid: item.txid, voucher: item.voucher });
+    console.log(`PIX GERADO R$ ${valorFmt} ${voucher} IP ${ip} MAC ${mac}`);
+    return res.json({ qrcode: qr.qrcode, qrcodeImage: qr.imagemQrcode, txid: item.txid, voucher });
 
   }catch(err){
-    console.error('ERRO /api/pix', err.message, err.stack);
-    return res.status(500).json({error: err.message});
+    console.error('ERRO /api/pix', err.message);
+    if(err.errors) console.error(JSON.stringify(err.errors));
+    return res.status(500).json({ error: err.message, details: err.errors || null });
   }
 });
 
-// 2. VERIFICAR PAGAMENTO
 app.get('/api/verificar/:txid', async (req,res)=>{
   try{
     const { txid } = req.params;
-    const client = getEfiClient();
+    const client = getEfi();
     let pago = false;
-
-    if(client){
-      try{
-        const consulta = await client.pixDetailCharge({ txid });
-        if(consulta.status === 'CONCLUIDA' || consulta.pix && consulta.pix.length > 0){
-          pago = true;
-        }
-      }catch(e){
-        // se falhar consulta, mantém AGUARDANDO
-      }
-    }
-
     const item = fila.find(f=>f.txid===txid || f.id===txid);
+    if(client && item){
+      try{
+        const det = await client.pixDetailCharge({ txid });
+        if(det.status==='CONCLUIDA' || (det.pix && det.pix.length>0)) pago=true;
+      }catch(e){}
+    }
+    // MOCK auto-paga em 15s pra teste
+    if(!client && item){
+      if(Date.now() - new Date(item.criacao).getTime() > 15000) pago=true;
+    }
     if(item && pago){
-      item.status = 'PAGO_LIBERAR';
+      item.status='PAGO_LIBERAR';
       salvarFila();
-      console.log(`✅ PAGO CONFIRMADO txid=${txid} voucher=${item.voucher} IP=${item.ip} MAC=${item.mac}`);
+      console.log(`✅ PAGO CONFIRMADO ${item.voucher} ${item.ip}`);
     }
-
-    // MOCK pra teste se não tem EFI
-    if(!client){
-      if(item){
-        // simula pago depois de 15s
-        const diff = Date.now() - new Date(item.criacao).getTime();
-        if(diff > 15000){
-          item.status = 'PAGO_LIBERAR';
-          salvarFila();
-          pago = true;
-        }
-      }
-    }
-
-    return res.json({ pago, status: item?.status || 'NAO_ENCONTRADO', voucher: item?.voucher });
-  }catch(err){
-    return res.status(500).json({error: err.message});
-  }
+    return res.json({ pago, status: item?.status||'NAO_ENCONTRADO', voucher: item?.voucher });
+  }catch(e){ return res.status(500).json({error:e.message}); }
 });
 
-// 3. FILA PARA O MIKROTIK PUXAR
-app.get('/api/fila', (req,res)=>{
-  // ESSA ROTA ERA A QUE FLOODAVA - AGORA NÃO LOGA MAIS SE TOTAL=0
-  res.json(fila.filter(f=>f.status==='PAGO_LIBERAR'));
-});
+app.get('/api/fila', (req,res)=> res.json(fila.filter(f=>f.status==='PAGO_LIBERAR')));
+app.get('/api/liberacoes', (req,res)=> res.json(fila.filter(f=>f.status==='PAGO_LIBERAR')));
 
-app.get('/api/liberacoes', (req,res)=>{
-  const liberados = fila.filter(f=>f.status==='PAGO_LIBERAR');
-  res.json(liberados);
-});
-
-// 4. MIKROTIK AVISA QUE LIBEROU
 app.post('/api/liberar', (req,res)=>{
-  try{
-    const { txid, mac, ip } = req.body;
-    const idx = fila.findIndex(f=> (f.txid===txid || f.id===txid) || (mac && f.mac===mac.toLowerCase()));
-    if(idx >= 0){
-      console.log(`✅ LIBERADO RAPIDO ${fila[idx].voucher} ${fila[idx].ip} -> ${ip||''} ${fila[idx].mac}`);
-      fila.splice(idx,1);
-      salvarFila();
-    }
-    res.json({ ok:true });
-  }catch(e){
-    res.status(500).json({error:e.message});
+  const { txid, mac } = req.body;
+  const idx = fila.findIndex(f=> f.txid===txid || f.id===txid || (mac && f.mac===mac.toLowerCase()));
+  if(idx>=0){
+    console.log(`✅ LIBERADO RAPIDO ${fila[idx].voucher} ${fila[idx].ip} ${fila[idx].mac}`);
+    fila.splice(idx,1);
+    salvarFila();
   }
+  res.json({ok:true});
 });
 
-app.get('/', (req,res)=> res.send('SLS API v12.5.6 CLEAN LOG ON'));
-
-app.listen(PORT, ()=> console.log(`SLS API RODANDO PORTA ${PORT}`));
+app.get('/', (req,res)=> res.send('SLS v12.5.7 FINAL ON'));
+app.listen(PORT, ()=> console.log(`SLS API RODANDO ${PORT}`));
