@@ -1,164 +1,181 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SLS WIFI EVENTOS</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SLS WIFI - Pagamento PIX</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Arial}
-body{background:#111;display:flex;justify-content:center;padding:10px}
-.box{width:100%;max-width:360px;background:#0d0d0d;border-radius:14px;overflow:hidden;border:1px solid #222}
-.top{padding:10px 12px;background:#0d0d0d}
-.online{font-size:10px;color:#00ff88;display:flex;align-items:center;gap:6px;letter-spacing:.5px}
-.online span{width:6px;height:6px;background:#00ff88;border-radius:50%;display:inline-block;animation:blink 1s infinite}
-@keyframes blink{50%{opacity:0}}
-.logo{display:flex;align-items:center;gap:8px;margin-top:6px}
-.logo-icon{width:28px;height:28px;background:linear-gradient(45deg,#ff7a00,#ffb400);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:900;color:#000;font-size:16px}
-.logo b{font-size:20px;color:#fff;letter-spacing:.5px}.logo b span{color:#ff8c00}
-.sub{font-size:11px;color:#aaa;margin-top:2px}
-.warn{background:#ffd400;color:#000;font-size:11px;font-weight:700;text-align:center;padding:7px}
-.title-row{display:flex;justify-content:space-between;align-items:center;padding:12px 12px 6px}
-.title-row h3{font-size:13px;color:#fff}
-.badge{background:#2a2a6a;color:#8a8aff;font-size:9px;padding:4px 8px;border-radius:20px}
-.plan{margin:8px 12px;background:#181818;border:1.5px solid #2a2a2a;border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;position:relative}
-.plan.selected{border-color:#ffd400;background:#1f1d0f}
-.plan-left{display:flex;gap:8px;align-items:flex-start}
-.plan-left .ico{width:16px;height:16px;border:1.5px solid #555;border-radius:50%;margin-top:2px;display:flex;align-items:center;justify-content:center}
-.plan.selected .ico{border-color:#ffd400;background:#ffd400}
-.plan.selected .ico:after{content:'✓';font-size:10px;color:#000;font-weight:900}
-.plan-name{font-size:12px;font-weight:700;color:#fff}
-.plan-desc{font-size:10px;color:#777;margin-top:1px}
-.plan-right{text-align:right}
-.price{font-size:16px;font-weight:900;color:#ffd400}
-.time{font-size:9px;color:#777}
-.mais{position:absolute;top:-7px;right:10px;background:#ff0000;color:#fff;font-size:8px;font-weight:800;padding:2px 6px;border-radius:10px}
-.btn-gerar{margin:12px;background:#ffd400;color:#000;border:0;width:calc(100% - 24px);padding:14px;border-radius:10px;font-weight:900;font-size:13px;letter-spacing:.5px}
-#pixbox{display:none;padding:12px;text-align:center;background:#181818;margin:0 12px 12px;border-radius:10px;border:1px solid #333}
-#qrimg{width:200px;height:200px;background:#fff;padding:6px;border-radius:10px;margin:10px auto;display:none}
-#brcode{font-size:10px;word-break:break-all;background:#0f0f0f;padding:8px;border-radius:6px;border:1px dashed #444;color:#ccc;margin-top:8px}
-#pago{display:none;background:#00ff88;color:#000;padding:12px;border-radius:8px;font-weight:900;margin-top:10px}
-.voucher{padding:0 12px 12px}
-.voucher small{display:block;text-align:center;color:#777;font-size:10px;margin:8px 0}
-.voucher input{width:100%;background:#181818;border:1px solid #2a2a2a;color:#fff;padding:10px;border-radius:8px;margin-bottom:6px;font-size:12px;text-align:center}
-.btn-voucher{width:100%;background:#2a2a4a;color:#fff;border:0;padding:11px;border-radius:8px;font-weight:700;font-size:12px}
-.mac{font-size:8px;color:#333;text-align:center;padding:8px}
+*{margin:0;padding:0;box-sizing:border-box;font-family:Inter,system-ui,sans-serif}
+body{background:#0f0f14;color:#fff;min-height:100vh;display:flex;justify-content:center;padding:12px}
+.card{width:100%;max-width:380px;background:#1a1a23;border-radius:24px;padding:16px;border:1px solid #2a2a35;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.top{display:flex;align-items:center;gap:8px;justify-content:center;color:#8a8aa3;font-size:11px;margin-bottom:12px}
+.dot{width:8px;height:8px;background:#00ff88;border-radius:50%;box-shadow:0 0 10px #00ff88;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.logo{display:flex;flex-direction:column;align-items:center;margin-bottom:10px}
+.logo-icon{width:48px;height:48px;background:linear-gradient(135deg,#ff7a00,#ffaa00);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800}
+.logo h1{font-size:24px;letter-spacing:1px;margin-top:6px}
+.logo span{color:#ff7a00}
+.logo p{font-size:10px;color:#8a8aa3;margin-top:2px}
+.alert{background:#fff3cd;color:#664d03;border:1px solid #ffecb5;padding:8px;border-radius:10px;font-size:11px;font-weight:700;text-align:center;margin-bottom:12px}
+.plan-box{background:#242432;border-radius:12px;padding:10px;margin-bottom:8px;border:1px solid #2f2f42;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.plan-box.active{border-color:#ff7a00;background:#2a2218}
+.plan-left{display:flex;gap:8px;align-items:center}
+.circle{width:20px;height:20px;border-radius:50%;border:2px solid #555;display:flex;align-items:center;justify-content:center;font-size:10px}
+.plan-box.active .circle{border-color:#ff7a00;background:#ff7a00;color:#000}
+.plan-box h3{font-size:13px}
+.plan-box small{font-size:10px;color:#8a8aa3}
+.price{font-size:16px;font-weight:800}
+.badge{background:#a855f7;color:#fff;font-size:8px;padding:2px 6px;border-radius:20px;font-weight:700;position:absolute;top:-6px;right:10px}
+.btn{width:100%;background:linear-gradient(135deg,#ffe600,#ffcc00);color:#000;border:none;padding:13px;border-radius:12px;font-weight:800;font-size:13px;cursor:pointer;margin-top:10px}
+.btn:disabled{opacity:.5}
+.voucher-area{margin-top:14px;border-top:1px solid #2a2a35;padding-top:12px}
+.voucher-area label{font-size:10px;color:#8a8aa3;text-align:center;display:block;margin-bottom:6px}
+.input{width:100%;background:#0f0f14;border:1px solid #2f2f42;border-radius:10px;padding:11px;color:#fff;margin-bottom:6px;font-size:13px;outline:none}
+.input:focus{border-color:#ff7a00}
+.btn-voucher{width:100%;background:#3a3a4a;color:#fff;border:none;padding:11px;border-radius:10px;font-weight:700;font-size:12px;cursor:pointer}
+.error{margin-top:10px;background:#3a1a1a;border:1px solid #5a2a2a;color:#ffb3b3;padding:8px;border-radius:8px;font-size:11px;display:none;white-space:pre-wrap}
+#pixArea{display:none;margin-top:12px;background:#fff;color:#000;border-radius:14px;padding:12px;text-align:center}
+#qrcode{width:240px;height:240px;margin:10px auto;background:#fff;display:flex;align-items:center;justify-content:center;border-radius:8px;overflow:hidden}
+#pixCopia{font-size:10px;word-break:break-all;background:#f0f0f0;border:1px dashed #ccc;padding:6px;border-radius:6px;max-height:60px;overflow-y:auto}
+.footer{margin-top:12px;text-align:center;font-size:9px;color:#5a5a6a}
 </style>
 </head>
 <body>
-<div class="box">
-<div class="top">
-<div class="online"><span></span> ONLINE - 247 CLIENTES CONECTADOS</div>
-<div class="logo"><div class="logo-icon">📶</div><b>SLS<span>WIFI</span></b></div>
-<div class="sub">Internet rápida • Pagamento instantâneo via PIX</div>
-</div>
-<div class="warn">NÃO FECHE ESTA TELA ATÉ PAGAR!</div>
-<div class="title-row"><h3>ESCOLHA SEU PLANO</h3><div class="badge">⚡ Ativação imediata</div></div>
+<div class="card">
+  <div class="top"><div class="dot"></div> ONLINE • <span id="count">247</span> CLIENTES CONECTADOS</div>
+  <div class="logo"><div class="logo-icon">📶</div><h1>SLS<span>WIFI</span></h1><p>Internet rápida • Pagamento instantâneo via PIX</p></div>
+  <div class="alert">⚠ NÃO FECHE ESTA TELA ATÉ PAGAR!</div>
 
-<div id="planos">
-<div class="plan selected" data-plano="1H" data-valor="3" data-tempo="1 hora" onclick="sel(this)">
-<div class="plan-left"><div class="ico"></div><div><div class="plan-name">1 HORA - 5 MEGA</div><div class="plan-desc">Ideal para uso rápido</div></div></div>
-<div class="plan-right"><div class="price">R$ 3</div><div class="time">1h de acesso</div></div>
-</div>
-<div class="plan" data-plano="2H" data-valor="5" data-tempo="3 horas" onclick="sel(this)">
-<div class="mais">MAIS VENDIDO</div>
-<div class="plan-left"><div class="ico"></div><div><div class="plan-name">2 HORAS - 10 MEGA</div><div class="plan-desc">Mais vendido - 10 Mega</div></div></div>
-<div class="plan-right"><div class="price">R$ 5</div><div class="time">2h de acesso</div></div>
-</div>
-<div class="plan" data-plano="DIA" data-valor="12" data-tempo="8 horas" onclick="sel(this)">
-<div class="plan-left"><div class="ico">📅</div><div><div class="plan-name">EVENTO TODO - 15 MEGA</div><div class="plan-desc">Ultra rápida o dia todo</div></div></div>
-<div class="plan-right"><div class="price">R$ 12</div><div class="time">8h de acesso</div></div>
-</div>
-<button class="btn-gerar" onclick="gerar()">GERAR PIX - PAGAR AGORA</button>
-</div>
+  <div style="display:flex;justify-content:space-between;margin-bottom:6px"><b style="font-size:12px">ESCOLHA SEU PLANO</b><span style="font-size:8px;background:#2a2a3a;padding:3px 6px;border-radius:20px">⚡ Ativação imediata</span></div>
 
-<div id="pixbox">
-<div id="planoinfo" style="font-weight:800;color:#ffd400;font-size:12px"></div>
-<img id="qrimg">
-<div id="brcode"></div>
-<button class="btn-gerar" style="margin:10px 0 0 0;width:100%" onclick="copiar()">COPIAR PIX COPIA E COLA</button>
-<p style="font-size:10px;color:#888;margin-top:8px">Aguardando pagamento... checando a cada 3s</p>
-<div id="pago">✅ PAGO!<br>NET LIBERADA<br><small style="font-size:11px">Pode navegar, liberação em 5s</small></div>
-</div>
+  <div class="plan-box active" data-valor="3" data-tempo="1h" data-profile="1HORA" style="position:relative">
+    <div class="plan-left"><div class="circle">◷</div><div><h3>1 HORA - 5 MEGA</h3><small>Ideal para uso rápido</small></div></div>
+    <div style="text-align:right"><div class="price">R$ 3</div><small>1h</small></div>
+  </div>
+  <div class="plan-box" data-valor="5" data-tempo="2h" data-profile="2HORAS" style="position:relative">
+    <span class="badge">MAIS VENDIDO</span>
+    <div class="plan-left"><div class="circle">◷</div><div><h3>2 HORAS - 10 MEGA</h3><small>Mais vendido</small></div></div>
+    <div style="text-align:right"><div class="price">R$ 5</div><small>2h</small></div>
+  </div>
+  <div class="plan-box" data-valor="12" data-tempo="8h" data-profile="DIARIA">
+    <div class="plan-left"><div class="circle">📅</div><div><h3>EVENTO TODO - 15 MEGA</h3><small>O dia todo</small></div></div>
+    <div style="text-align:right"><div class="price">R$ 12</div><small>8h</small></div>
+  </div>
 
-<div class="voucher">
-<small>TEM VOUCHER?</small>
-<form name="login" action="$(link-login-only)" method="post">
-<input type="hidden" name="dst" value="$(link-orig)">
-<input type="hidden" name="popup" value="true">
-<input name="username" placeholder="CODIGO VOUCHER" required>
-<input type="password" name="password" placeholder="SENHA" value="">
-<button type="submit" class="btn-voucher">ENTRAR COM VOUCHER</button>
-</form>
-</div>
-<div class="mac">MAC: $(mac) | SLS hEX v13 FIX QR</div>
+  <button class="btn" id="btnGerar">GERAR PIX - PAGAR AGORA</button>
+
+  <div id="pixArea">
+    <b id="pixValor">PIX R$ 3,00</b>
+    <div id="qrcode">Gerando QR...</div>
+    <div id="pixCopia"></div>
+    <button class="btn" style="margin-top:8px;padding:10px;background:#000;color:#ffe600" onclick="copiarPix()">COPIAR PIX COPIA E COLA</button>
+    <small style="display:block;margin-top:8px;color:#666;font-size:11px">Aguardando pagamento... checando a cada 3s<br>Não feche esta tela!</small>
+  </div>
+
+  <div class="voucher-area">
+    <label>TEM VOUCHER?</label>
+    <input class="input" id="voucherUser" placeholder="CÓDIGO VOUCHER">
+    <input class="input" id="voucherPass" type="password" placeholder="SENHA">
+    <button class="btn-voucher" onclick="loginVoucher()">ENTRAR COM VOUCHER</button>
+  </div>
+
+  <div class="error" id="errorBox"></div>
+  <div class="footer" id="footerMac">MAC: carregando... • SLS WIFI © 2025</div>
 </div>
 
 <script>
-const API="https://hotsport-pix-2.onrender.com";
-let selected=document.querySelector('.plan.selected');
-let tx=null;
-let macAddr="$(mac)";
-if(macAddr.indexOf("$")!==-1 || macAddr.length<10) macAddr="BC:45:20:11:22:33";
-let userField=document.getElementsByName("username")[0];
-let passField=document.getElementsByName("password")[0];
-userField.addEventListener('input',()=>{ passField.value=userField.value; });
+// === CONFIG FIX 06:14 - APONTA PRO RENDER CERTO ===
+const API_BASE = "https://hotsport-pix-2.onrender.com";
 
-function sel(el){
- document.querySelectorAll('.plan').forEach(p=>p.classList.remove('selected'));
- el.classList.add('selected');
- selected=el;
-}
-
-function gerar(){
- if(!selected) return;
- let plano=selected.dataset.plano;
- let valor=selected.dataset.valor;
- let tempo=selected.dataset.tempo;
- document.getElementById('planos').style.display='none';
- document.getElementById('pixbox').style.display='block';
- document.getElementById('planoinfo').innerText=selected.querySelector('.plan-name').innerText+" - R$ "+valor;
- fetch(API+"/api/gerar-qrcode",{
-   method:'POST',
-   headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({mac:macAddr, plano, valor, tempo})
- })
- .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
- .then(d=>{
-   tx=d.txid;
-   document.getElementById('brcode').innerText=d.brcode;
-   let img=document.getElementById('qrimg');
-   img.style.display='block';
-   if(d.qrcode && d.qrcode.length>50){
-     img.src=d.qrcode.startsWith('data')?d.qrcode:'data:image/png;base64,'+d.qrcode;
-   }else{
-     img.src='https://api.qrserver.com/v1/create-qr-code/?size=220x220&data='+encodeURIComponent(d.brcode);
-   }
-   checar();
- })
- .catch(e=>{
-   alert('Erro ao gerar PIX: '+e.message+'\nConfere se o index.js v13 está no ar');
-   document.getElementById('planos').style.display='block';
-   document.getElementById('pixbox').style.display='none';
- });
-}
-
-function copiar(){
- navigator.clipboard.writeText(document.getElementById('brcode').innerText);
- alert('PIX copiado!');
-}
-
-function checar(){
- let iv=setInterval(()=>{
-  if(!tx) return;
-  fetch(API+'/api/fila?txid='+tx).then(r=>r.json()).then(j=>{
-    if(j.status==='PAGO_LIBERAR'){
-      clearInterval(iv);
-      document.getElementById('pago').style.display='block';
-      setTimeout(()=>{ location.href="$(link-orig)"; },2000);
-    }
+let planoSelecionado = {valor:3, tempo:'1h', profile:'1HORA'};
+document.querySelectorAll('.plan-box').forEach(box=>{
+  box.addEventListener('click',()=>{
+    document.querySelectorAll('.plan-box').forEach(b=>b.classList.remove('active'));
+    box.classList.add('active');
+    planoSelecionado.valor = box.dataset.valor;
+    planoSelecionado.tempo = box.dataset.tempo;
+    planoSelecionado.profile = box.dataset.profile;
   });
- },3000);
+});
+
+const urlParams = new URLSearchParams(window.location.search);
+let macRaw = urlParams.get('mac') || "$(mac)";
+let ipRaw = urlParams.get('ip') || "$(ip)";
+try{ macRaw=decodeURIComponent(macRaw); }catch{}
+try{ ipRaw=decodeURIComponent(ipRaw); }catch{}
+let mac = macRaw.replace(/%3A/gi,':').trim().toUpperCase();
+let ip = ipRaw.trim();
+if(mac.includes('$')||mac.length<8) mac='AA:BB:CC:DD:EE:FF';
+if(ip.includes('$')) ip='0.0.0.0';
+document.getElementById('footerMac').innerText = `MAC: ${mac} | IP: ${ip} | SLS hEX v13.7 FINAL`;
+
+const btn=document.getElementById('btnGerar');
+const errorBox=document.getElementById('errorBox');
+
+btn.addEventListener('click', async ()=>{
+  errorBox.style.display='none';
+  btn.disabled=true; btn.textContent='GERANDO PIX...';
+  try{
+    // ROTA QUE FUNCIONOU 06:14 - /api/gerar-qrcode
+    const res = await fetch(API_BASE + '/api/gerar-qrcode', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({valor:Number(planoSelecionado.valor), tempo:planoSelecionado.tempo, plan:planoSelecionado.profile, profile:planoSelecionado.profile, mac, ip})
+    });
+    const text=await res.text();
+    let data; try{ data=JSON.parse(text); }catch{ throw new Error(text.slice(0,200)); }
+    if(!data.brcode && !data.qrcode) throw new Error('API não retornou PIX');
+
+    const brcode = data.brcode || data.qrcode || data.pixCopiaECola;
+    document.getElementById('pixValor').textContent = `PIX R$ ${planoSelecionado.valor},00 - ${planoSelecionado.tempo}`;
+    document.getElementById('pixCopia').innerText = brcode;
+
+    // GERA QR VISUAL - FIX QUEBRADO
+    const qrDiv=document.getElementById('qrcode');
+    qrDiv.innerHTML=`<img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(brcode)}" style="width:100%;height:100%">`;
+
+    document.getElementById('pixArea').style.display='block';
+    document.getElementById('pixArea').scrollIntoView({behavior:'smooth'});
+
+    const txid=data.txid||data.id;
+    if(!txid) throw new Error('Sem TXID');
+
+    // Polling 3s - verifica PAGO_LIBERAR
+    const interval=setInterval(async ()=>{
+      try{
+        const v=await fetch(`${API_BASE}/api/fila?txid=${txid}`).then(r=>r.json());
+        console.log('Verifica', v);
+        if(v.status==='PAGO_LIBERAR'){
+          clearInterval(interval);
+          document.getElementById('pixArea').innerHTML=`<h2 style="color:green">✅ PAGO!<br>NET LIBERADA</h2><p>MAC ${mac}<br>Aguarde 5s e pode navegar!</p>`;
+          // Libera via hEX
+          setTimeout(()=>{ window.location.href='http://10.5.50.1/login?dst=&popup=true'; },3000);
+        }
+      }catch(e){}
+    },3000);
+
+  }catch(err){
+    console.error(err);
+    errorBox.textContent='Erro: '+err.message;
+    errorBox.style.display='block';
+  }finally{
+    btn.disabled=false; btn.textContent='GERAR PIX - PAGAR AGORA';
+  }
+});
+
+function copiarPix(){
+  const t=document.getElementById('pixCopia').innerText;
+  navigator.clipboard.writeText(t).then(()=>alert('PIX copiado!')).catch(()=>{
+    const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); alert('PIX copiado!');
+  });
 }
+function loginVoucher(){
+  const u=document.getElementById('voucherUser').value.trim();
+  const p=document.getElementById('voucherPass').value.trim();
+  if(!u||!p){ alert('Digite voucher e senha'); return; }
+  window.location.href=`http://10.5.50.1/login?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`;
+}
+setInterval(()=>{ document.getElementById('count').textContent=240+Math.floor(Math.random()*15); },5000);
 </script>
 </body>
 </html>
