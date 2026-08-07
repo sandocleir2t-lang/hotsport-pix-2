@@ -54,18 +54,18 @@ body{background:#0f0f14;color:#fff;min-height:100vh;display:flex;justify-content
     <span style="font-size:9px;background:#2a2a3a;padding:4px 8px;border-radius:20px">⚡ Ativação imediata</span>
   </div>
 
-  <div class="plan-box active" data-valor="3" data-tempo="1h">
+  <div class="plan-box active" data-valor="3" data-tempo="1h" data-profile="1HORA" data-plan="1HORA">
     <div class="plan-left"><div class="circle">◷</div><div><h3>1 HORA - 5 MEGA</h3><small>Ideal para uso rápido</small></div></div>
     <div style="text-align:right"><div class="price">R$ 3</div><small>1h de acesso</small></div>
   </div>
 
-  <div class="plan-box" data-valor="5" data-tempo="2h">
+  <div class="plan-box" data-valor="5" data-tempo="2h" data-profile="2HORAS" data-plan="2HORAS">
     <span class="badge">MAIS VENDIDO</span>
     <div class="plan-left"><div class="circle">◷</div><div><h3>2 HORAS - 10 MEGA</h3><small>Mais vendido - 10 Mega</small></div></div>
     <div style="text-align:right"><div class="price">R$ 5</div><small>2h</small></div>
   </div>
 
-  <div class="plan-box" data-valor="12" data-tempo="8h">
+  <div class="plan-box" data-valor="12" data-tempo="8h" data-profile="DIARIA" data-plan="DIARIA">
     <div class="plan-left"><div class="circle">📅</div><div><h3>EVENTO TODO - 15 MEGA</h3><small>Ultra rápido - o dia todo</small></div></div>
     <div style="text-align:right"><div class="price">R$ 12</div><small>8h de acesso</small></div>
   </div>
@@ -95,77 +95,100 @@ body{background:#0f0f14;color:#fff;min-height:100vh;display:flex;justify-content
 </div>
 
 <script>
-let planoSelecionado = {valor:3, tempo:'1h'};
+// === CONFIG - SUA API ===
+const API_BASE = "https://sls-wifi-api.onrender.com";
+
+let planoSelecionado = {valor:3, tempo:'1h', profile:'1HORA', plan:'1HORA'};
 document.querySelectorAll('.plan-box').forEach(box=>{
   box.addEventListener('click',()=>{
     document.querySelectorAll('.plan-box').forEach(b=>b.classList.remove('active'));
     box.classList.add('active');
     planoSelecionado.valor = box.dataset.valor;
     planoSelecionado.tempo = box.dataset.tempo;
+    planoSelecionado.profile = box.dataset.profile || box.dataset.tempo;
+    planoSelecionado.plan = box.dataset.plan || box.dataset.tempo;
   });
 });
 
-// === CORREÇÃO DO MAC - LÊ DA URL ===
+// === CAPTURA MAC E IP DA URL DO HOTSPOT ===
 const urlParams = new URLSearchParams(window.location.search);
 let macRaw = urlParams.get('mac') || urlParams.get('mac-esc') || "$(mac)";
 let ipRaw = urlParams.get('ip') || "$(ip)";
 try{ macRaw = decodeURIComponent(macRaw); }catch{}
 try{ ipRaw = decodeURIComponent(ipRaw); }catch{}
-let mac = macRaw.replace(/%3A/gi, ':').trim();
+let mac = macRaw.replace(/%3A/gi, ':').trim().toUpperCase();
 let ip = ipRaw.trim();
 if(mac.includes('$') || mac.includes('(') || mac.length < 8){
-  // se ainda não tem mac, tenta pegar sem decode
   mac = urlParams.get('mac') || '00:00:00:00:00:00';
-  try{ mac = decodeURIComponent(mac); }catch{}
+  try{ mac = decodeURIComponent(mac).toUpperCase(); }catch{}
 }
 if(ip.includes('$')) ip = '0.0.0.0';
-console.log('URL completa:', window.location.search);
-console.log('MAC CAPTURADO:', mac, 'IP:', ip);
+console.log('URL:', window.location.search);
+console.log('MAC:', mac, 'IP:', ip);
 document.getElementById('footerMac').innerText = 'MAC: '+mac+' • IP: '+ip+' • SLS WIFI © 2025 - Se MAC for 00:00 reconecte no WIFI';
 
 const btn = document.getElementById('btnGerar');
 const errorBox = document.getElementById('errorBox');
 
 btn.addEventListener('click', async ()=>{
-  if(mac === '00:00:00:00:00:00' || mac === '00:00:00:00'){
-    alert('ERRO: MAC está 00:00! Você abriu o site direto. Conecte no WIFI SLS e abra pelo portal. URL: '+window.location.search);
+  if(mac === '00:00:00:00:00:00' || mac === '00:00:00:00' || mac.includes('00:00:00:00:00:00')){
+    alert('ERRO: MAC 00:00! Você abriu o arquivo direto (C:/). Você tem que abrir pelo portal do Mikrotik ou subir esse arquivo em IP > Hotspot > Files');
     return;
   }
   errorBox.style.display='none';
   btn.disabled=true;
   btn.textContent='GERANDO PIX...';
   try{
-    const res = await fetch('/gerar', {
+    // CHAMA SUA API DIRETO - CORRIGIDO V12
+    const res = await fetch(API_BASE + '/api/pix/gerar', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({valor: planoSelecionado.valor, tempo: planoSelecionado.tempo, mac, ip})
+      body: JSON.stringify({valor: Number(planoSelecionado.valor), tempo: planoSelecionado.tempo, plan: planoSelecionado.plan, profile: planoSelecionado.profile, mac, ip})
     });
     const text = await res.text();
     let data;
-    try{ data = JSON.parse(text); }catch(e){ throw new Error('Erro servidor: '+text.slice(0,200)); }
+    try{ data = JSON.parse(text); }catch(e){ throw new Error('Erro servidor: '+text.slice(0,300)); }
     
+    if(data.erro || data.error){ throw new Error(data.erro || data.error); }
+
     document.getElementById('pixValor').textContent = 'PIX R$ '+planoSelecionado.valor+',00 - '+planoSelecionado.tempo;
-    document.getElementById('pixCopia').value = data.qrcode || data.copiaecola || '';
-    document.getElementById('qrcode').innerHTML = data.imagem ? `<img src="${data.imagem}" style="width:100%">` : `<div style="font-size:11px;word-break:break-all;padding:10px">${data.qrcode?.slice(0,80)}...</div>`;
+    document.getElementById('pixCopia').value = data.qrcode || data.copiaecola || data.brcode || '';
+    
+    if(data.imagem || data.qr_image){
+      document.getElementById('qrcode').innerHTML = `<img src="${data.imagem || data.qr_image}" style="width:100%">`;
+    } else if(data.qrcode_url){
+      document.getElementById('qrcode').innerHTML = `<img src="${data.qrcode_url}" style="width:100%">`;
+    } else {
+      // fallback sem imagem
+      document.getElementById('qrcode').innerHTML = `<canvas id="qrCanvas"></canvas><div style="font-size:10px;word-break:break-all;padding:4px">${(data.qrcode||'').slice(0,60)}...</div>`;
+    }
+    
     document.getElementById('pixArea').style.display='block';
     document.getElementById('pixArea').scrollIntoView({behavior:'smooth'});
 
-    const txid = data.txid;
+    const txid = data.txid || data.id;
+    if(!txid){ throw new Error('Sem TXID retornado da API'); }
+
+    // Polling verifica pagamento
     const interval = setInterval(async ()=>{
       try{
-        const v = await fetch('/verifica/'+txid).then(r=>r.json());
-        if(v.status==='CONCLUIDA' || v.pago){
+        const v = await fetch(API_BASE + '/api/pix/verifica/'+txid).then(r=>r.json());
+        console.log('Verifica:', v);
+        if(v.status==='CONCLUIDA' || v.pago === true || v.paid === true){
           clearInterval(interval);
-          alert('PAGAMENTO CONFIRMADO! Liberando '+mac);
-          // libera via api
-          await fetch('/api/liberacoes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mac, ip, tempo: planoSelecionado.tempo})});
-          document.getElementById('pixArea').innerHTML = '<h2 style="color:green">✅ LIBERADO!<br>MAC '+mac+'</h2><p>Pode usar a internet!</p>';
+          document.getElementById('pixArea').innerHTML = '<h2 style="color:green">✅ PAGAMENTO CONFIRMADO!<br>MAC '+mac+'</h2><p>Liberando internet... Aguarde 5s e pode navegar!</p>';
+          // A liberação agora é feita pelo script SLS-LIBERA-v11 no Mikrotik que consulta a API a cada 30s, não precisa mais chamar /api/liberacoes aqui
+          setTimeout(()=>{
+            // Tenta logar automatico no hotspot se estiver em regular, ou só libera se bypassed
+            window.location.href = 'http://10.5.50.1/login?username='+encodeURIComponent(mac)+'&password='+encodeURIComponent(mac);
+          }, 3000);
         }
-      }catch{}
+      }catch(e){ console.log('erro verifica', e); }
     }, 3000);
 
   }catch(err){
-    errorBox.textContent = 'Erro: '+err.message;
+    console.error(err);
+    errorBox.textContent = 'Erro: '+err.message + '\nVerifique se a API '+API_BASE+' está online no Render';
     errorBox.style.display='block';
   }finally{
     btn.disabled=false;
@@ -175,14 +198,18 @@ btn.addEventListener('click', async ()=>{
 
 function copiarPix(){
   const input = document.getElementById('pixCopia');
-  input.select(); document.execCommand('copy');
+  input.select();
+  input.setSelectionRange(0, 99999);
+  document.execCommand('copy');
   alert('PIX copiado!');
 }
 function loginVoucher(){
-  const u = document.getElementById('voucherUser').value;
-  const p = document.getElementById('voucherPass').value;
+  const u = document.getElementById('voucherUser').value.trim();
+  const p = document.getElementById('voucherPass').value.trim();
   if(!u||!p){ alert('Digite voucher e senha'); return; }
-  window.location.href = `http://10.10.10.1/login?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`;
+  // IP do Hotspot - ajuste se seu gateway for diferente de 10.5.50.1
+  const hotspotIP = '10.5.50.1';
+  window.location.href = `http://${hotspotIP}/login?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`;
 }
 setInterval(()=>{ document.getElementById('count').textContent = 240+Math.floor(Math.random()*15); },5000);
 </script>
