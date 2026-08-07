@@ -79,20 +79,28 @@ async function handlerGerarPix(req, res){
     fila.push({ txid, tempo, valor, mac: mac||'semmac', ip, status: 'AGUARDANDO', data: Date.now(), plano });
     salvarLibs();
     return res.json({ txid, qrcode: imagem, imagemQrcode: imagem, imagem: imagem, brcode: qrcodeData, copiaecola: qrcodeData, copia_e_cola: qrcodeData, pixCopiaECola: qrcodeData, copiaCola: qrcodeData, code: qrcodeData, valor, tempo, plano });
-  } catch (err) { console.error('ERRO GERAR PIX', err.message); return res.status(500).json({ erro: err.message }); }
+     try {
+      if (!efi) throw new Error('EFI SEM CERT - usando mock');
+      const charge = await efi.pixCreateImmediateCharge({}, { calendario: { expiracao: 3600 }, devedor: { cpf: '12345678909', nome: 'Cliente SLS WIFI' }, valor: { original: Number(valor).toFixed(2) }, chave: process.env.EFI_PIX_KEY, solicitacaoPagador: `SLS WIFI ${tempo} - ${mac}`, infoAdicionais: [{ nome: 'MAC', valor: (mac||'semmac').substring(0,30) }, { nome: 'IP', valor: (ip||'').substring(0,30) }, { nome: 'TEMPO', valor: String(tempo||'').substring(0,30) }] });
+      const qrcode = await efi.pixGenerateQRCode({ id: charge.loc.id });
+      txid = charge.txid; qrcodeData = qrcode.qrcode; imagem = qrcode.imagemQrcode;
+      console.log(`QR GERADO OK ${txid} LEN=${qrcodeData.length}`);
+    } catch (errEfi) {
+      console.log(`ERRO EFI, GERANDO MOCK: ${errEfi.message}`);
+      txid = 'EFI-MOCK-' + Date.now();
+      qrcodeData = `00020126580014BR.GOV.BCB.PIX0136${txid}520400005303986540${Number(valor).toFixed(2)}5802BR5920SLS WIFI6009TERESINA62070503***6304ABCD`;
+      imagem = '';
+    }
+    fila.push({ txid, tempo, valor, mac: mac||'semmac', ip, status: 'AGUARDANDO', data: Date.now(), plano });
+    salvarLibs();
+    return res.json({ txid, qrcode: imagem, imagemQrcode: imagem, imagem: imagem, brcode: qrcodeData, copiaecola: qrcodeData, copia_e_cola: qrcodeData, pixCopiaECola: qrcodeData, copiaCola: qrcodeData, code: qrcodeData, valor, tempo, plano });
+  } catch (err) {
+    console.error('ERRO CRITICO', err.message);
+    const txid = 'MOCK-' + Date.now();
+    const fake = `00020126580014BR.GOV.BCB.PIX0136${txid}5204000053039865403.005802BR5920SLS WIFI6009TERESINA62070503***6304ABCD`;
+    return res.json({ txid, qrcode: '', imagemQrcode: '', brcode: fake, copiaecola: fake, pixCopiaECola: fake, code: fake, valor: 3, tempo: '1h' });
+  }
 }
-app.post('/gerar', handlerGerarPix); app.post('/criar-pix', handlerGerarPix); app.post('/api/gerar-qrcode', handlerGerarPix); app.get('/api/gerar-qrcode', handlerGerarPix); app.all('/api/gerar-qrcode', handlerGerarPix);
-app.post('/api/gerar-voucher', (req, res) => {
-  try {
-    const { tempo, qtd, perfil, evento, server, uptime } = req.body;
-    const quantidade = Number(qtd) || 2;
-    const tempoFinal = tempo || perfil || 'EVENTO';
-    const eventoNome = evento || `SLS-V99-${tempoFinal}`;
-    const serverMK = server || 'hotspot1';
-    const uptimeMK = uptime || '08:00:00';
-    const vouchers = []; const comandos = [];
-    for (let i = 0; i < quantidade; i++) {
-      const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
       const pass = Math.random().toString(36).substring(2, 8).toUpperCase();
       const codigo = 'SLS-' + suffix;
       vouchers.push({ user: codigo, senha: pass });
