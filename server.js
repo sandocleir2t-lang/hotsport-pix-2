@@ -1,30 +1,21 @@
-// hotspot-pix-2 - server.js v15 DEFINITIVO - POLLING
-// Base: seu v14 + polling EFI (não depende só de webhook)
-// - Mantém tudo do v14
-// - NOVO: a cada 20s pergunta direto na EFI se o PENDENTE foi pago
-
+// hotspot-pix-2 - server.js v16 FIX 1HORA + LOG CLARO
+// Base: seu v15
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 process.on('uncaughtException', (err) => console.error('[ANTI-500] uncaughtException:', err.message));
 process.on('unhandledRejection', (err) => console.error('[ANTI-500] unhandledRejection:', err?.message || err));
-
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
-
 const FILA_FILE = path.join(__dirname, 'fila.json');
 const PAG_FILE = path.join(__dirname, 'pagamentos.json');
-
 let pagamentos = new Map();
 let filaLiberar = [];
-
 function carregarDisco() {
   try {
     if (fs.existsSync(PAG_FILE)) {
@@ -45,7 +36,6 @@ function salvarDisco() {
   } catch (e) { console.error('[DISCO] erro salvar', e.message); }
 }
 carregarDisco();
-
 function safeCertificado() {
   try {
     const base64 = process.env.EFI_CERTIFICADO_BASE64;
@@ -74,7 +64,6 @@ async function getEfiClient() {
     return new EfiPay({ sandbox: false, client_id: clientId, client_secret: clientSecret, certificate: certPath });
   } catch (e) { console.error('[EFI] getEfiClient fail', e.message); return null; }
 }
-
 async function criarPixCentral({ valor, cliente, mac, ip, plano, tempo }) {
   const valorFinal = parseFloat(valor) || 3.0;
   const txid = `SLS${Date.now()}${Math.floor(Math.random()*1000)}`.substring(0, 32).toUpperCase();
@@ -101,22 +90,19 @@ async function criarPixCentral({ valor, cliente, mac, ip, plano, tempo }) {
     brcode = gerarMockPix(txid, valorFinal).brcode;
     isMock = true;
   }
+  const planoFinal = (plano || tempo || '1HORA').toString().toUpperCase();
   const pag = {
-    txid, status: 'AGUARDANDO', valor: valorFinal, cliente: cliente || mac || plano || 'cliente',
-    mac: mac ? mac.toUpperCase() : null, ip: ip || null, plano: plano || tempo || '1HORA',
+    txid, status: 'AGUARDANDO', valor: valorFinal, cliente: cliente || mac || planoFinal || 'cliente',
+    mac: mac ? mac.toUpperCase() : null, ip: ip || null, plano: planoFinal,
     brcode, copiaecola: brcode, pixCopiaECola: brcode, qrcode: brcode, isMock, criadoEm: Date.now()
   };
   pagamentos.set(txid, pag);
   salvarDisco();
-  console.log(`[FILA] Novo PENDENTE - TXID=${txid} MAC=${mac} IP=${ip} R$${valorFinal} Plano=${pag.plano} Total=${pagamentos.size}`);
+  console.log(`[FILA] Novo PENDENTE - TXID=${txid} MAC=${mac} Plano=${pag.plano} Total=${pagamentos.size}`);
   return pag;
 }
-
-app.get('/', (req, res) => {
-  res.send(`SLS WIFI ONLINE v15 POLLING - ${new Date().toISOString()} - Pagamentos: ${pagamentos.size} - Fila: ${filaLiberar.length}`);
-});
-app.get('/api/health', (req, res) => res.json({ status:'ok', version:'v15 POLLING', time:new Date().toISOString(), totalPagamentos: pagamentos.size, fila: filaLiberar.length }));
-
+app.get('/', (req, res) => { res.send(`SLS WIFI ONLINE v16 - ${new Date().toISOString()} - Pagamentos: ${pagamentos.size} - Fila: ${filaLiberar.length}`); });
+app.get('/api/health', (req, res) => res.json({ status:'ok', version:'v16 FIX', time:new Date().toISOString(), totalPagamentos: pagamentos.size, fila: filaLiberar.length }));
 app.post('/api/criar-pix', async (req, res) => {
   try {
     const { valor, cliente, mac, ip, plano, tempo, plan, profile } = req.body || {};
@@ -147,9 +133,7 @@ app.get('/api/gerar-qrcode', async (req, res) => {
     if (!mac) return res.status(200).json({ error:'MAC obrigatório' });
     const pag = await criarPixCentral({ valor, mac, ip, plano: plano || tempo, tempo });
     return res.status(200).json({ ok:true, txid: pag.txid, brcode: pag.brcode, copiaecola: pag.brcode, pixCopiaECola: pag.brcode, qrcode: pag.brcode, valor: pag.valor, status:'AGUARDANDO' });
-  } catch (e) {
-    return res.status(200).json({ ok:false, erro:e.message });
-  }
+  } catch (e) { return res.status(200).json({ ok:false, erro:e.message }); }
 });
 app.get('/api/verifica/:txid', (req, res) => {
   const pag = pagamentos.get(req.params.txid);
@@ -161,7 +145,9 @@ app.get('/api/simular-pago/:txid', (req, res) => {
   if (!pag) return res.status(200).json({ ok:false });
   pag.status = 'PAGO_LIBERAR';
   pagamentos.set(req.params.txid, pag);
-  filaLiberar.push({ mac: pag.mac, ip: pag.ip, txid: pag.txid, cliente: pag.cliente, plano: pag.plano, data: new Date().toISOString() });
+  if (!filaLiberar.find(f=>f.txid===req.params.txid)) {
+    filaLiberar.push({ mac: pag.mac, ip: pag.ip, txid: pag.txid, cliente: pag.cliente, plano: pag.plano, data: new Date().toISOString() });
+  }
   salvarDisco();
   return res.status(200).json({ ok:true, fila: filaLiberar });
 });
@@ -179,11 +165,12 @@ app.get('/api/fila', (req, res) => {
 });
 app.get('/api/liberacoes', (req, res) => {
   try {
+    const pendentes = [...pagamentos.values()].filter(p=>p.status==='AGUARDANDO').length;
     const pagos = filaLiberar.filter(f=>f && f.txid);
-    console.log(`[SLS] Processando fila... ${pagos.length} para liberar | Total: ${pagamentos.size}`);
+    console.log(`[SLS] FILA=${pagos.length} | PENDENTES=${pendentes} | TOTAL=${pagamentos.size}`);
     if (pagos.length === 0) return res.set('Content-Type','text/plain').send('');
     let txt='';
-    pagos.forEach(p=>{ txt+=`${p.txid};${p.mac||'AA:BB:CC:DD:EE:FF'};${p.ip||''};${p.plano||'1HORA'}\n`; });
+    pagos.forEach(p=>{ txt+=`${p.txid};${(p.mac||'AA:BB:CC:DD:EE:FF').toUpperCase()};${p.ip||''};${(p.plano||'1HORA').toUpperCase()}\n`; });
     return res.set('Content-Type','text/plain').send(txt);
   } catch (e) { return res.set('Content-Type','text/plain').send(''); }
 });
@@ -202,10 +189,11 @@ app.get('/api/liberar-manual', (req, res) => {
   const { mac, ip, plano } = req.query;
   if (!mac) return res.status(200).send('mac obrigatorio');
   const txid = 'MANUAL_'+Date.now();
-  filaLiberar.push({ mac: mac.toUpperCase(), ip: ip||'', txid, plano: plano||'1HORA', data: new Date().toISOString() });
-  pagamentos.set(txid, { txid, mac: mac.toUpperCase(), ip, plano: plano||'1HORA', status:'PAGO_LIBERAR', criadoEm: Date.now() });
+  const planoF = (plano||'1HORA').toUpperCase();
+  filaLiberar.push({ mac: mac.toUpperCase(), ip: ip||'', txid, plano: planoF, data: new Date().toISOString() });
+  pagamentos.set(txid, { txid, mac: mac.toUpperCase(), ip, plano: planoF, status:'PAGO_LIBERAR', criadoEm: Date.now() });
   salvarDisco();
-  return res.send(`OK - ${mac} libera em 30s`);
+  return res.send(`OK - ${mac} libera em 10s - plano ${planoF}`);
 });
 app.post('/api/webhook/pix', (req, res) => {
   try {
@@ -219,8 +207,10 @@ app.post('/api/webhook/pix', (req, res) => {
         if (pag.status !== 'PAGO_LIBERAR') {
           pag.status = 'PAGO_LIBERAR';
           pagamentos.set(txid, pag);
-          filaLiberar.push({ mac: pag.mac, ip: pag.ip, txid, cliente: pag.cliente, plano: pag.plano, data: new Date().toISOString() });
-          console.log(`[PAGO] Webhook ${txid} -> PAGO_LIBERAR MAC=${pag.mac}`);
+          if (!filaLiberar.find(f=>f.txid===txid)) {
+            filaLiberar.push({ mac: pag.mac, ip: pag.ip, txid, cliente: pag.cliente, plano: pag.plano, data: new Date().toISOString() });
+          }
+          console.log(`[PAGO] Webhook ${txid} -> PAGO_LIBERAR MAC=${pag.mac} Plano=${pag.plano}`);
         }
       }
     }
@@ -229,19 +219,17 @@ app.post('/api/webhook/pix', (req, res) => {
   } catch (e) { return res.status(200).json({ ok:true }); }
 });
 app.post('/api/webhook', (req, res) => { req.url='/api/webhook/pix'; app.handle(req,res); });
-app.get('/api/status', (req,res)=> res.json({ versao:'v15 POLLING', total: pagamentos.size, pendentes: [...pagamentos.values()].filter(p=>p.status==='AGUARDANDO').length, pagos_para_liberar: filaLiberar.length, fila: filaLiberar }));
-app.get('/api/limpar-fila', (req,res)=>{ pagamentos.clear(); filaLiberar=[]; salvarDisco(); res.send('Fila limpa'); });
+app.get('/api/status', (req,res)=> res.json({ versao:'v16 FIX', total: pagamentos.size, pendentes: [...pagamentos.values()].filter(p=>p.status==='AGUARDANDO').length, pagos_para_liberar: filaLiberar.length, fila: filaLiberar }));
+app.get('/api/limpar-fila', (req,res)=>{ pagamentos.clear(); filaLiberar=[]; salvarDisco(); res.send('Fila limpa - todos os pendentes removidos'); });
 app.get('*', (req,res)=>{
   try {
     const indexPath = path.join(__dirname,'public','index.html');
     if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
-    return res.status(200).send(`SLS WIFI ONLINE v15 POLLING - ${new Date().toISOString()} - Fila: ${filaLiberar.length}`);
-  } catch { return res.status(200).send('OK v15'); }
+    return res.status(200).send(`SLS WIFI ONLINE v16 - ${new Date().toISOString()} - Fila: ${filaLiberar.length}`);
+  } catch { return res.status(200).send('OK v16'); }
 });
 app.use((err,req,res,next)=>{ console.error('[EXPRESS-ERROR]',err.message); return res.status(200).json({ ok:false, erro:'capturado', msg:err.message }); });
-app.listen(PORT, ()=>{ console.log(`[v15 POLLING] Rodando porta ${PORT}`); safeCertificado(); });
-
-// LIMPEZA + POLLING EFI
+app.listen(PORT, ()=>{ console.log(`[v16 FIX 1HORA] Rodando porta ${PORT}`); safeCertificado(); });
 setInterval(async ()=>{
   try{
     const agora=Date.now();
@@ -254,11 +242,9 @@ setInterval(async ()=>{
     if (mudou) salvarDisco();
   } catch(e){}
 }, 30000);
-
-// POLLING: pergunta na EFI se pendente foi pago (salva quando webhook falha)
 setInterval(async ()=>{
   try{
-    const pendentes = [...pagamentos.entries()].filter(([_,p])=>p.status==='AGUARDANDO');
+    const pendentes = [...pagamentos.entries()].filter(([_,p])=>p.status==='AGUARDANDO' && !p.isMock);
     if (pendentes.length===0) return;
     const efipay = await getEfiClient();
     if (!efipay) return;
@@ -266,7 +252,7 @@ setInterval(async ()=>{
       try {
         const detalhe = await efipay.pixDetailCharge({ txid });
         if (detalhe && detalhe.status === 'CONCLUIDA') {
-          console.log(`[POLL] ${txid} PAGO detectado na EFI! MAC=${pag.mac}`);
+          console.log(`[POLL] ${txid} PAGO detectado na EFI! MAC=${pag.mac} Plano=${pag.plano}`);
           pag.status='PAGO_LIBERAR';
           pagamentos.set(txid, pag);
           if (!filaLiberar.find(f=>f.txid===txid)) {
