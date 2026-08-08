@@ -1,308 +1,199 @@
-// hotspot-pix-2 - server.js v17 FIX DEFINITIVO - LOOP RESOLVIDO
-// CORREÇÃO: /liberacoes nunca retorna vazio (retorna VAZIO) + limpar robusto
+// server.js v18 FIX PAGAMENTO REAL + LOOP DEFINITIVO - SLS WIFI
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-process.on('uncaughtException', (err) => console.error('[ANTI-500] uncaughtException:', err.message));
-process.on('unhandledRejection', (err) => console.error('[ANTI-500] unhandledRejection:', err?.message || err));
-
-app.use(cors({ origin: '*' }));
-app.use(express.json({ limit: '2mb' }));
+app.use(cors());
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 
-const FILA_FILE = path.join(__dirname, 'fila.json');
-const PAG_FILE = path.join(__dirname, 'pagamentos.json');
-
+// --- PERSISTENCIA ---
 let pagamentos = new Map();
 let filaLiberar = [];
+const ARQ_FILA = './fila.json';
+const ARQ_PAG = './pagamentos.json';
 
-function carregarDisco() {
+function salvarFila() {
   try {
-    if (fs.existsSync(PAG_FILE)) {
-      const obj = JSON.parse(fs.readFileSync(PAG_FILE, 'utf8'));
-      pagamentos = new Map(Object.entries(obj));
-      console.log(`[DISCO] pagamentos carregados: ${pagamentos.size}`);
+    fs.writeFileSync(ARQ_FILA, JSON.stringify(filaLiberar, null, 2));
+    fs.writeFileSync(ARQ_PAG, JSON.stringify(Array.from(pagamentos.entries()), null, 2));
+  } catch (e) { console.error('[SAVE ERRO]', e.message); }
+}
+function carregarFila() {
+  try {
+    if (fs.existsSync(ARQ_FILA)) filaLiberar = JSON.parse(fs.readFileSync(ARQ_FILA));
+    if (fs.existsSync(ARQ_PAG)) pagamentos = new Map(JSON.parse(fs.readFileSync(ARQ_PAG)));
+    console.log(`[INIT] Carregado: ${pagamentos.size} pagamentos, ${filaLiberar.length} para liberar`);
+  } catch (e) { console.log('[INIT] Sem arquivos antigos, iniciando zerado'); }
+}
+carregarFila();
+
+// --- MOCK / EFI CONFIG ---
+let efipay = null;
+try {
+  const EfiPay = require('sdk-node-apis-efi');
+  if (process.env.EFI_CERT_BASE64) {
+    // Se usar certificado em base64 no Render
+    const certPath = '/tmp/cert.p12';
+    fs.writeFileSync(certPath, Buffer.from(process.env.EFI_CERT_BASE64, 'base64'));
+    efipay = new EfiPay({
+      sandbox: false,
+      client_id: process.env.EFI_CLIENT_ID,
+      client_secret: process.env.EFI_CLIENT_SECRET,
+      certificate: certPath,
+    });
+    console.log('[EFI] Cliente EFI REAL configurado');
+  }
+} catch (e) { console.log('[EFI] Rodando em MOCK (sem certificado)', e.message); }
+
+const VERSAO = "v18 FIX PAGAMENTO REAL + LOOP DEFINITIVO";
+
+// --- CRIAR PIX ---
+async function criarCobrancaPix({ mac, ip, plano, valor }) {
+  const txid = 'SLS' + Date.now() + Math.floor(Math.random()*1000);
+  const info = { txid, mac, ip, plano, valor: parseFloat(valor), status: 'PENDENTE', criado: new Date().toISOString() };
+
+  let qrcode = `000201 MOCK PIX ${txid}`;
+  let pixCopiaCola = qrcode;
+
+  if (efipay) {
+    try {
+      const body = { calendario: { expiracao: 3600 }, devedor: { cpf: "00000000000", nome: "Cliente SLS" }, valor: { original: valor.toFixed(2) }, chave: process.env.CHAVE_PIX, solicitacaoPagador: `SLS ${plano} ${mac}` };
+      const cob = await efipay.pixCreateImmediateCharge({}, body);
+      qrcode = cob.qrcode;
+      pixCopiaCola = cob.qrcode;
+      console.log(`[EFI] PIX real OK ${txid}`);
+    } catch (e) {
+      console.error('[EFI ERRO]', e.message);
+      // Continua no MOCK se falhar
     }
-    if (fs.existsSync(FILA_FILE)) {
-      filaLiberar = JSON.parse(fs.readFileSync(FILA_FILE, 'utf8'));
-      console.log(`[DISCO] fila carregada: ${filaLiberar.length}`);
-    }
-  } catch (e) { console.error('[DISCO] erro carregar', e.message); }
-}
-function salvarDisco() {
-  try {
-    fs.writeFileSync(PAG_FILE, JSON.stringify(Object.fromEntries(pagamentos), null, 2));
-    fs.writeFileSync(FILA_FILE, JSON.stringify(filaLiberar, null, 2));
-  } catch (e) { console.error('[DISCO] erro salvar', e.message); }
-}
-carregarDisco();
-
-function safeCertificado() {
-  try {
-    const base64 = process.env.EFI_CERTIFICADO_BASE64;
-    if (!base64) return null;
-    const certPath = path.join(__dirname, 'certificado.p12');
-    if (!fs.existsSync(certPath)) {
-      fs.writeFileSync(certPath, Buffer.from(base64, 'base64'));
-      console.log('[EFI] certificado.p12 criado');
-    }
-    return certPath;
-  } catch (e) { console.error('[EFI] erro cert', e.message); return null; }
-}
-function gerarMockPix(txid, valor) {
-  const chave = process.env.EFI_PIX_KEY || 'pix@hotspot.com';
-  const v = (parseFloat(valor) || 2).toFixed(2);
-  const payload = `00020126580014BR.GOV.BCB.PIX0136${chave}520400005303986540${v}5802BR5925HOTSPOT PIX 2 6009TERESINA62070503***6304${txid.substring(0,4)}`;
-  return { brcode: payload, copiaecola: payload, pixCopiaECola: payload, qrcode: payload, isMock: true };
-}
-async function getEfiClient() {
-  try {
-    const clientId = process.env.EFI_CLIENT_ID;
-    const clientSecret = process.env.EFI_CLIENT_SECRET;
-    const certPath = safeCertificado();
-    if (!clientId || !clientSecret || !certPath) return null;
-    const EfiPay = require('sdk-node-apis-efi');
-    return new EfiPay({ sandbox: false, client_id: clientId, client_secret: clientSecret, certificate: certPath });
-  } catch (e) { console.error('[EFI] getEfiClient fail', e.message); return null; }
-}
-async function criarPixCentral({ valor, cliente, mac, ip, plano, tempo }) {
-  const valorFinal = parseFloat(valor) || 3.0;
-  const txid = `SLS${Date.now()}${Math.floor(Math.random()*1000)}`.substring(0, 32).toUpperCase();
-  let brcode = '';
-  let isMock = false;
-  try {
-    const efipay = await getEfiClient();
-    if (efipay) {
-      const body = {
-        calendario: { expiracao: 3600 },
-        valor: { original: valorFinal.toFixed(2) },
-        chave: process.env.EFI_PIX_KEY,
-        solicitacaoPagador: `Hotspot ${cliente || mac || plano || 'cliente'}`
-      };
-      const chargePromise = efipay.pixCreateImmediateCharge([], body);
-      const charge = await Promise.race([chargePromise, new Promise((_,rej)=>setTimeout(()=>rej(new Error('EFI timeout')),8000))]);
-      const qrPromise = efipay.pixGenerateQRCode({ id: charge.loc.id });
-      const qrcode = await Promise.race([qrPromise, new Promise((_,rej)=>setTimeout(()=>rej(new Error('EFI QR timeout')),8000))]);
-      brcode = qrcode.qrcode || qrcode.qrCode || '';
-      console.log('[EFI] PIX real OK', txid);
-    } else throw new Error('EFI null');
-  } catch (e) {
-    console.log('[EFI] mock fallback:', e.message);
-    brcode = gerarMockPix(txid, valorFinal).brcode;
-    isMock = true;
+  } else {
+    console.log(`[MOCK] PIX OK ${txid}`);
   }
-  const planoFinal = (plano || tempo || '1HORA').toString().toUpperCase();
-  const pag = {
-    txid, status: 'AGUARDANDO', valor: valorFinal, cliente: cliente || mac || planoFinal || 'cliente',
-    mac: mac ? mac.toUpperCase() : null, ip: ip || null, plano: planoFinal,
-    brcode, copiaecola: brcode, pixCopiaECola: brcode, qrcode: brcode, isMock, criadoEm: Date.now()
-  };
-  pagamentos.set(txid, pag);
-  salvarDisco();
-  console.log(`[FILA] Novo PENDENTE - TXID=${txid} MAC=${mac} Plano=${pag.plano} Total=${pagamentos.size}`);
-  return pag;
+
+  pagamentos.set(txid, info);
+  console.log(`[FILA] Novo PENDENTE - TXID=${txid} MAC=${mac} IP=${ip} R$${valor} Plano=${plano} Total=${pagamentos.size}`);
+  salvarFila();
+  return { txid, qrcode, pixCopiaCola,...info };
 }
 
-app.get('/', (req, res) => { res.send(`SLS WIFI ONLINE v17 - ${new Date().toISOString()} - Pagamentos: ${pagamentos.size} - Fila: ${filaLiberar.length}`); });
-app.get('/api/health', (req, res) => res.json({ status:'ok', version:'v17 FIX LOOP', time:new Date().toISOString(), totalPagamentos: pagamentos.size, fila: filaLiberar.length }));
+app.post('/api/criar-pix', async (req,res)=>{ const r = await criarCobrancaPix(req.body); res.json(r); });
+app.post('/api/gerar-qrcode', async (req,res)=>{ const r = await criarCobrancaPix(req.body); res.json(r); });
 
-app.post('/api/criar-pix', async (req, res) => {
-  try {
-    const { valor, cliente, mac, ip, plano, tempo, plan, profile } = req.body || {};
-    const pag = await criarPixCentral({ valor, cliente, mac, ip, plano: plano || plan || profile || tempo, tempo });
-    return res.status(200).json({ ok:true, txid: pag.txid, brcode: pag.brcode, copiaecola: pag.brcode, pixCopiaECola: pag.brcode, qrcode: pag.brcode, qr: pag.brcode, valor: pag.valor, status:'AGUARDANDO' });
-  } catch (e) {
-    const txidFallback = `MOCK${Date.now()}`;
-    const mock = gerarMockPix(txidFallback, 3.0);
-    return res.status(200).json({ ok:true, txid: txidFallback, brcode: mock.brcode, copiaecola: mock.brcode, pixCopiaECola: mock.brcode, qrcode: mock.brcode, qr: mock.brcode, valor:3.0, status:'AGUARDANDO', aviso:'fallback' });
-  }
-});
-app.post('/api/gerar-qrcode', async (req, res) => {
-  try {
-    const { valor, mac, ip, plano, tempo, plan, profile, cliente } = req.body || {};
-    const v = valor || req.body?.valor || 3;
-    const p = plano || plan || profile || tempo || '1HORA';
-    const pag = await criarPixCentral({ valor: v, cliente, mac, ip, plano: p, tempo });
-    return res.status(200).json({ ok:true, txid: pag.txid, brcode: pag.brcode, copiaecola: pag.brcode, pixCopiaECola: pag.brcode, qrcode: pag.brcode, qr: pag.brcode, valor: pag.valor, status:'AGUARDANDO' });
-  } catch (e) {
-    const txidFallback = `MOCK${Date.now()}`;
-    const mock = gerarMockPix(txidFallback, 3.0);
-    return res.status(200).json({ ok:true, txid: txidFallback, brcode: mock.brcode, copiaecola: mock.brcode, pixCopiaECola: mock.brcode, qrcode: mock.brcode, valor:3.0, status:'AGUARDANDO' });
-  }
-});
-app.get('/api/gerar-qrcode', async (req, res) => {
-  try {
-    const { mac, ip, plano, valor, tempo } = req.query;
-    if (!mac) return res.status(200).json({ error:'MAC obrigatório' });
-    const pag = await criarPixCentral({ valor, mac, ip, plano: plano || tempo, tempo });
-    return res.status(200).json({ ok:true, txid: pag.txid, brcode: pag.brcode, copiaecola: pag.brcode, pixCopiaECola: pag.brcode, qrcode: pag.brcode, valor: pag.valor, status:'AGUARDANDO' });
-  } catch (e) { return res.status(200).json({ ok:false, erro:e.message }); }
-});
-app.get('/api/verifica/:txid', (req, res) => {
-  const pag = pagamentos.get(req.params.txid);
-  if (!pag) return res.status(200).json({ ok:false, status:'NAO_ENCONTRADO' });
-  return res.status(200).json({ ok:true, txid: pag.txid, status: pag.status, valor: pag.valor });
-});
-app.get('/api/simular-pago/:txid', (req, res) => {
-  const pag = pagamentos.get(req.params.txid);
-  if (!pag) return res.status(200).json({ ok:false });
-  pag.status = 'PAGO_LIBERAR';
-  pagamentos.set(req.params.txid, pag);
-  if (!filaLiberar.find(f=>f.txid===req.params.txid)) {
-    filaLiberar.push({ mac: pag.mac, ip: pag.ip, txid: pag.txid, cliente: pag.cliente, plano: pag.plano, data: new Date().toISOString() });
-  }
-  salvarDisco();
-  return res.status(200).json({ ok:true, fila: filaLiberar });
-});
-app.get('/api/fila', (req, res) => {
-  try {
-    const { txid } = req.query;
-    if (txid) {
-      const pag = pagamentos.get(txid);
-      if (!pag) return res.status(200).json({ status:'NAO_ENCONTRADO' });
-      return res.status(200).json({ status: pag.status, ok: pag.status==='PAGO_LIBERAR', txid: pag.txid, valor: pag.valor });
-    }
-    if (req.query.limpar === '1') { filaLiberar = []; salvarDisco(); }
-    return res.status(200).json([...filaLiberar]);
-  } catch (e) { return res.status(200).json([]); }
-});
-
-// ====== FIX PRINCIPAL - LIBERAÇÕES ======
-app.get('/api/liberacoes', (req, res) => {
-  try {
-    const pendentes = [...pagamentos.values()].filter(p=>p.status==='AGUARDANDO').length;
-    const pagos = filaLiberar.filter(f=>f && f.txid);
-    console.log(`[SLS] FILA=${pagos.length} | PENDENTES=${pendentes} | TOTAL=${pagamentos.size}`);
-    if (pagos.length === 0) {
-      // NUNCA RETORNA VAZIO - RETORNA VAZIO PARA O HEX NAO REUSAR ARQUIVO VELHO
-      return res.set('Content-Type','text/plain').send('VAZIO\n');
-    }
-    // Retorna APENAS 1 POR VEZ para o hEX nao se perder
-    const p = pagos[0];
-    const txt = `${p.txid};${(p.mac||'AA:BB:CC:DD:EE:FF').toUpperCase()};${p.ip||''};${(p.plano||'1HORA').toUpperCase()}\n`;
-    return res.set('Content-Type','text/plain').send(txt);
-  } catch (e) { 
-    return res.set('Content-Type','text/plain').send('VAZIO\n'); 
-  }
-});
-
-app.get('/api/liberacoes/limpar', (req, res) => {
-  try {
-    const { txid } = req.query;
-    console.log(`[SLS v17] Pedido limpar TXID=${txid}`);
-    if (!txid) return res.send('OK SEM TXID');
-    
-    const antesFila = filaLiberar.length;
-    const antesPag = pagamentos.size;
-    
-    filaLiberar = filaLiberar.filter(f=>f.txid !== txid && f.txid !== txid.toUpperCase() && f.txid !== txid.toLowerCase());
-    pagamentos.delete(txid);
-    pagamentos.delete(txid.toUpperCase());
-    pagamentos.delete(txid.toLowerCase());
-    
-    salvarDisco();
-    
-    console.log(`[SLS v17] Liberado e limpo TXID ${txid} | Fila ${antesFila}->${filaLiberar.length} | Pag ${antesPag}->${pagamentos.size}`);
-    return res.json({ ok: true, limpo: txid, filaRestante: filaLiberar.length });
-  } catch (e) { 
-    console.error('[LIMPAR ERRO]', e.message);
-    return res.json({ ok: true, erro: e.message }); 
-  }
-});
-
-app.get('/api/liberar-manual', (req, res) => {
-  const { mac, ip, plano } = req.query;
-  if (!mac) return res.status(200).send('mac obrigatorio');
-  const txid = 'MANUAL_'+Date.now();
-  const planoF = (plano||'1HORA').toUpperCase();
-  filaLiberar.push({ mac: mac.toUpperCase(), ip: ip||'', txid, plano: planoF, data: new Date().toISOString() });
-  pagamentos.set(txid, { txid, mac: mac.toUpperCase(), ip, plano: planoF, status:'PAGO_LIBERAR', criadoEm: Date.now() });
-  salvarDisco();
-  return res.send(`OK - ${mac} libera em 10s - plano ${planoF}`);
-});
+// --- WEBHOOK EFI CORRIGIDO - O CORAÇÃO DO FIX ---
 app.post('/api/webhook/pix', (req, res) => {
+  console.log('[WEBHOOK] Recebido EFI:', JSON.stringify(req.body).slice(0,800));
   try {
-    console.log('[WEBHOOK] recebido', JSON.stringify(req.body).substring(0,600));
-    const pixs = req.body?.pix || [];
-    for (const p of pixs) {
-      const txid = p.txid;
-      if (!txid) continue;
-      if (pagamentos.has(txid)) {
-        const pag = pagamentos.get(txid);
-        if (pag.status !== 'PAGO_LIBERAR') {
-          pag.status = 'PAGO_LIBERAR';
-          pagamentos.set(txid, pag);
-          if (!filaLiberar.find(f=>f.txid===txid)) {
-            filaLiberar.push({ mac: pag.mac, ip: pag.ip, txid, cliente: pag.cliente, plano: pag.plano, data: new Date().toISOString() });
-          }
-          console.log(`[PAGO] Webhook ${txid} -> PAGO_LIBERAR MAC=${pag.mac} Plano=${pag.plano}`);
-        }
+    // EFI manda { pix: [ {txid, endToEndId, valor...} ] }
+    const listaPix = req.body.pix || req.body.pixRecebidos || [];
+    const lista = Array.isArray(listaPix)? listaPix : [listaPix];
+
+    lista.forEach(p => {
+      if(!p.txid) return;
+      const txidRecebido = p.txid;
+      console.log(`[WEBHOOK] Pagamento detectado TXID=${txidRecebido} E2E=${p.endToEndId} Valor=${p.valor}`);
+
+      const pag = pagamentos.get(txidRecebido);
+      if (pag && pag.status!== 'CONCLUIDA') {
+        pag.status = 'CONCLUIDA';
+        pag.e2eId = p.endToEndId;
+        pag.pagoEm = new Date().toISOString();
+        pagamentos.set(txidRecebido, pag);
+
+        const linha = `${pag.txid};${pag.mac};${pag.ip};${pag.plano}`;
+        filaLiberar.push(linha);
+        salvarFila();
+        console.log(`[FILA] LIBERADO! TXID=${pag.txid} -> filaLiberar total=${filaLiberar.length} LINHA=${linha}`);
+      } else if(!pag){
+        console.log(`[WEBHOOK] TXID ${txidRecebido} não encontrado no Map (talvez já limpo)`);
       }
-    }
-    salvarDisco();
-    return res.status(200).json({ ok:true });
-  } catch (e) { return res.status(200).json({ ok:true }); }
+    });
+  } catch (e) { console.error('[WEBHOOK ERRO]', e); }
+  // SEMPRE retornar 200 pra EFI não ficar reenviando
+  res.status(200).json({ ok: true });
 });
-app.post('/api/webhook', (req, res) => { req.url='/api/webhook/pix'; app.handle(req,res); });
-app.get('/api/status', (req,res)=> res.json({ versao:'v17 FIX LOOP DEFINITIVO', total: pagamentos.size, pendentes: [...pagamentos.values()].filter(p=>p.status==='AGUARDANDO').length, pagos_para_liberar: filaLiberar.length, fila: filaLiberar }));
-app.get('/api/limpar-fila', (req,res)=>{ pagamentos.clear(); filaLiberar=[]; salvarDisco(); res.json({ ok: true, msg: 'Fila limpa - todos removidos' }); });
+
+// --- ENDPOINTS DO MIKROTIK ---
+app.get('/api/liberacoes', (req,res)=>{
+  if (filaLiberar.length === 0) {
+    return res.type('text/plain').send('VAZIO\n'); // FIX LOOP v17
+  }
+  const linha = filaLiberar[0]; // Retorna 1 por vez
+  console.log(`[SLS] Enviando para hEX: ${linha} | Restam: ${filaLiberar.length}`);
+  res.type('text/plain').send(linha + '\n');
+});
+
+app.get('/api/liberacoes/limpar', (req,res)=>{
+  const { txid } = req.query;
+  if(!txid) return res.status(400).send('sem txid');
+  const antes = filaLiberar.length;
+  filaLiberar = filaLiberar.filter(l =>!l.startsWith(txid));
+  // Também pode remover de pagamentos se quiser
+  salvarFila();
+  console.log(`[SLS] hEX confirmou TXID=${txid} | Antes:${antes} Agora:${filaLiberar.length}`);
+  res.send(`OK limpo ${txid}`);
+});
+
+// --- DIAGNOSTICO E EMERGENCIA ---
+app.get('/api/status', (req,res)=>{
+  res.json({ versao: VERSAO, total: pagamentos.size, pendentes: Array.from(pagamentos.values()).filter(p=>p.status==='PENDENTE').length, pagos_para_liberar: filaLiberar.length, fila: filaLiberar });
+});
+
+app.get('/api/fila', (req,res)=>{
+  res.json({ pagamentos: Array.from(pagamentos.values()), filaLiberar });
+});
+
+app.get('/api/limpar-fila', (req,res)=>{
+  pagamentos.clear();
+  filaLiberar = [];
+  salvarFila();
+  res.send('TUDO ZERADO - fila e pagamentos limpos');
+});
+
 app.get('/api/teste', (req,res)=>{
-  const mac = (req.query.mac || 'AA:BB:CC:DD:EE:99').toUpperCase();
-  const plano = (req.query.plano || '1HORA').toUpperCase();
-  const txid = 'SLS'+Date.now();
-  filaLiberar.push({ mac, ip: '10.5.50.10', txid, cliente: 'teste', plano, data: new Date().toISOString() });
-  pagamentos.set(txid, { txid, mac, ip: '10.5.50.10', plano, status:'PAGO_LIBERAR', criadoEm: Date.now() });
-  salvarDisco();
-  return res.json({ ok:true, injetado: {txid, mac, plano}, fila: filaLiberar.length });
+  const mac = req.query.mac || 'AA:BB:CC:DD:EE:99';
+  const plano = req.query.plano || '1HORA';
+  const txid = 'TESTE' + Date.now();
+  const linha = `${txid};${mac};10.5.50.200;${plano}`;
+  filaLiberar.push(linha);
+  salvarFila();
+  res.send(`Teste injetado: ${linha}`);
 });
-app.get('*', (req,res)=>{
-  try {
-    const indexPath = path.join(__dirname,'public','index.html');
-    if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
-    return res.status(200).send(`SLS WIFI ONLINE v17 - ${new Date().toISOString()} - Fila: ${filaLiberar.length}`);
-  } catch { return res.status(200).send('OK v17'); }
+
+// NOVO: Forçar confirmação de um PIX que já foi pago mas ficou PENDENTE
+app.get('/api/confirmar/:txid', (req,res)=>{
+  const txid = req.params.txid;
+  const pag = pagamentos.get(txid);
+  if(!pag) return res.status(404).send(`TXID ${txid} não encontrado. Veja /api/fila`);
+  if(pag.status === 'CONCLUIDA') return res.send(`Já está CONCLUIDA e na fila? fila=${JSON.stringify(filaLiberar)}`);
+  pag.status = 'CONCLUIDA';
+  pagamentos.set(txid, pag);
+  const linha = `${pag.txid};${pag.mac};${pag.ip};${pag.plano}`;
+  filaLiberar.push(linha);
+  salvarFila();
+  console.log(`[MANUAL] Forçado ${txid} para liberação`);
+  res.send(`OK! Forçado ${txid} para fila. Linha: ${linha}. Aguarde 10s o hEX puxar.`);
 });
-app.use((err,req,res,next)=>{ console.error('[EXPRESS-ERROR]',err.message); return res.status(200).json({ ok:false, erro:'capturado', msg:err.message }); });
-app.listen(PORT, ()=>{ console.log(`[v17 FIX LOOP DEFINITIVO] Rodando porta ${PORT}`); safeCertificado(); });
 
-setInterval(async ()=>{
-  try{
-    const agora=Date.now();
-    let mudou=false;
-    for (const [txid,pag] of pagamentos) {
-      if (agora-pag.criadoEm>3600000 && pag.status==='AGUARDANDO') { pag.status='EXPIRADO'; pagamentos.set(txid,pag); mudou=true; }
-      if (agora-pag.criadoEm>24*3600000) { pagamentos.delete(txid); mudou=true; }
+app.get('/api/confirmar-todos', (req,res)=>{
+  let qtd=0;
+  for(let [txid, pag] of pagamentos.entries()){
+    if(pag.status === 'PENDENTE'){
+      pag.status = 'CONCLUIDA';
+      filaLiberar.push(`${pag.txid};${pag.mac};${pag.ip};${pag.plano}`);
+      qtd++;
     }
-    if (filaLiberar.length>100) { filaLiberar = filaLiberar.slice(-100); mudou=true; }
-    if (mudou) salvarDisco();
-  } catch(e){}
-}, 30000);
+  }
+  salvarFila();
+  res.send(`Forçados ${qtd} pendentes para fila. Total agora: ${filaLiberar.length}`);
+});
 
-setInterval(async ()=>{
-  try{
-    const pendentes = [...pagamentos.entries()].filter(([_,p])=>p.status==='AGUARDANDO' && !p.isMock);
-    if (pendentes.length===0) return;
-    const efipay = await getEfiClient();
-    if (!efipay) return;
-    for (const [txid, pag] of pendentes) {
-      try {
-        const detalhe = await efipay.pixDetailCharge({ txid });
-        if (detalhe && detalhe.status === 'CONCLUIDA') {
-          console.log(`[POLL] ${txid} PAGO detectado na EFI! MAC=${pag.mac} Plano=${pag.plano}`);
-          pag.status='PAGO_LIBERAR';
-          pagamentos.set(txid, pag);
-          if (!filaLiberar.find(f=>f.txid===txid)) {
-            filaLiberar.push({ mac: pag.mac, ip: pag.ip, txid, cliente: pag.cliente, plano: pag.plano, data: new Date().toISOString() });
-          }
-          salvarDisco();
-        }
-      } catch(err){}
-      await new Promise(r=>setTimeout(r,500));
-    }
-  } catch(e){ console.error('[POLL] erro', e.message); }
-}, 20000);
+app.listen(PORT, ()=>{ console.log(`[SLS] ${VERSAO} rodando na porta ${PORT}`); });
+
+// Loop de log a cada 20s
+setInterval(()=>{ console.log(`[SLS] Processando fila... ${filaLiberar.length} para liberar | Total: ${pagamentos.size}`); }, 20000);
