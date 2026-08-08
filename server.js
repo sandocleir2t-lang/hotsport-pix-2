@@ -1,21 +1,26 @@
-// hotspot-pix-2 - server.js v16 FIX 1HORA + LOG CLARO
-// Base: seu v15
+// hotspot-pix-2 - server.js v17 FIX DEFINITIVO - LOOP RESOLVIDO
+// CORREÇÃO: /liberacoes nunca retorna vazio (retorna VAZIO) + limpar robusto
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
+
 process.on('uncaughtException', (err) => console.error('[ANTI-500] uncaughtException:', err.message));
 process.on('unhandledRejection', (err) => console.error('[ANTI-500] unhandledRejection:', err?.message || err));
+
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
 const FILA_FILE = path.join(__dirname, 'fila.json');
 const PAG_FILE = path.join(__dirname, 'pagamentos.json');
+
 let pagamentos = new Map();
 let filaLiberar = [];
+
 function carregarDisco() {
   try {
     if (fs.existsSync(PAG_FILE)) {
@@ -36,6 +41,7 @@ function salvarDisco() {
   } catch (e) { console.error('[DISCO] erro salvar', e.message); }
 }
 carregarDisco();
+
 function safeCertificado() {
   try {
     const base64 = process.env.EFI_CERTIFICADO_BASE64;
@@ -101,8 +107,10 @@ async function criarPixCentral({ valor, cliente, mac, ip, plano, tempo }) {
   console.log(`[FILA] Novo PENDENTE - TXID=${txid} MAC=${mac} Plano=${pag.plano} Total=${pagamentos.size}`);
   return pag;
 }
-app.get('/', (req, res) => { res.send(`SLS WIFI ONLINE v16 - ${new Date().toISOString()} - Pagamentos: ${pagamentos.size} - Fila: ${filaLiberar.length}`); });
-app.get('/api/health', (req, res) => res.json({ status:'ok', version:'v16 FIX', time:new Date().toISOString(), totalPagamentos: pagamentos.size, fila: filaLiberar.length }));
+
+app.get('/', (req, res) => { res.send(`SLS WIFI ONLINE v17 - ${new Date().toISOString()} - Pagamentos: ${pagamentos.size} - Fila: ${filaLiberar.length}`); });
+app.get('/api/health', (req, res) => res.json({ status:'ok', version:'v17 FIX LOOP', time:new Date().toISOString(), totalPagamentos: pagamentos.size, fila: filaLiberar.length }));
+
 app.post('/api/criar-pix', async (req, res) => {
   try {
     const { valor, cliente, mac, ip, plano, tempo, plan, profile } = req.body || {};
@@ -163,28 +171,50 @@ app.get('/api/fila', (req, res) => {
     return res.status(200).json([...filaLiberar]);
   } catch (e) { return res.status(200).json([]); }
 });
+
+// ====== FIX PRINCIPAL - LIBERAÇÕES ======
 app.get('/api/liberacoes', (req, res) => {
   try {
     const pendentes = [...pagamentos.values()].filter(p=>p.status==='AGUARDANDO').length;
     const pagos = filaLiberar.filter(f=>f && f.txid);
     console.log(`[SLS] FILA=${pagos.length} | PENDENTES=${pendentes} | TOTAL=${pagamentos.size}`);
-    if (pagos.length === 0) return res.set('Content-Type','text/plain').send('');
-    let txt='';
-    pagos.forEach(p=>{ txt+=`${p.txid};${(p.mac||'AA:BB:CC:DD:EE:FF').toUpperCase()};${p.ip||''};${(p.plano||'1HORA').toUpperCase()}\n`; });
+    if (pagos.length === 0) {
+      // NUNCA RETORNA VAZIO - RETORNA VAZIO PARA O HEX NAO REUSAR ARQUIVO VELHO
+      return res.set('Content-Type','text/plain').send('VAZIO\n');
+    }
+    // Retorna APENAS 1 POR VEZ para o hEX nao se perder
+    const p = pagos[0];
+    const txt = `${p.txid};${(p.mac||'AA:BB:CC:DD:EE:FF').toUpperCase()};${p.ip||''};${(p.plano||'1HORA').toUpperCase()}\n`;
     return res.set('Content-Type','text/plain').send(txt);
-  } catch (e) { return res.set('Content-Type','text/plain').send(''); }
+  } catch (e) { 
+    return res.set('Content-Type','text/plain').send('VAZIO\n'); 
+  }
 });
+
 app.get('/api/liberacoes/limpar', (req, res) => {
   try {
     const { txid } = req.query;
-    if (!txid) return res.send('OK');
-    filaLiberar = filaLiberar.filter(f=>f.txid !== txid);
+    console.log(`[SLS v17] Pedido limpar TXID=${txid}`);
+    if (!txid) return res.send('OK SEM TXID');
+    
+    const antesFila = filaLiberar.length;
+    const antesPag = pagamentos.size;
+    
+    filaLiberar = filaLiberar.filter(f=>f.txid !== txid && f.txid !== txid.toUpperCase() && f.txid !== txid.toLowerCase());
     pagamentos.delete(txid);
+    pagamentos.delete(txid.toUpperCase());
+    pagamentos.delete(txid.toLowerCase());
+    
     salvarDisco();
-    console.log(`[SLS] Liberado e limpo TXID ${txid}`);
-    return res.send('OK');
-  } catch (e) { return res.send('OK'); }
+    
+    console.log(`[SLS v17] Liberado e limpo TXID ${txid} | Fila ${antesFila}->${filaLiberar.length} | Pag ${antesPag}->${pagamentos.size}`);
+    return res.json({ ok: true, limpo: txid, filaRestante: filaLiberar.length });
+  } catch (e) { 
+    console.error('[LIMPAR ERRO]', e.message);
+    return res.json({ ok: true, erro: e.message }); 
+  }
 });
+
 app.get('/api/liberar-manual', (req, res) => {
   const { mac, ip, plano } = req.query;
   if (!mac) return res.status(200).send('mac obrigatorio');
@@ -219,17 +249,27 @@ app.post('/api/webhook/pix', (req, res) => {
   } catch (e) { return res.status(200).json({ ok:true }); }
 });
 app.post('/api/webhook', (req, res) => { req.url='/api/webhook/pix'; app.handle(req,res); });
-app.get('/api/status', (req,res)=> res.json({ versao:'v16 FIX', total: pagamentos.size, pendentes: [...pagamentos.values()].filter(p=>p.status==='AGUARDANDO').length, pagos_para_liberar: filaLiberar.length, fila: filaLiberar }));
-app.get('/api/limpar-fila', (req,res)=>{ pagamentos.clear(); filaLiberar=[]; salvarDisco(); res.send('Fila limpa - todos os pendentes removidos'); });
+app.get('/api/status', (req,res)=> res.json({ versao:'v17 FIX LOOP DEFINITIVO', total: pagamentos.size, pendentes: [...pagamentos.values()].filter(p=>p.status==='AGUARDANDO').length, pagos_para_liberar: filaLiberar.length, fila: filaLiberar }));
+app.get('/api/limpar-fila', (req,res)=>{ pagamentos.clear(); filaLiberar=[]; salvarDisco(); res.json({ ok: true, msg: 'Fila limpa - todos removidos' }); });
+app.get('/api/teste', (req,res)=>{
+  const mac = (req.query.mac || 'AA:BB:CC:DD:EE:99').toUpperCase();
+  const plano = (req.query.plano || '1HORA').toUpperCase();
+  const txid = 'SLS'+Date.now();
+  filaLiberar.push({ mac, ip: '10.5.50.10', txid, cliente: 'teste', plano, data: new Date().toISOString() });
+  pagamentos.set(txid, { txid, mac, ip: '10.5.50.10', plano, status:'PAGO_LIBERAR', criadoEm: Date.now() });
+  salvarDisco();
+  return res.json({ ok:true, injetado: {txid, mac, plano}, fila: filaLiberar.length });
+});
 app.get('*', (req,res)=>{
   try {
     const indexPath = path.join(__dirname,'public','index.html');
     if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
-    return res.status(200).send(`SLS WIFI ONLINE v16 - ${new Date().toISOString()} - Fila: ${filaLiberar.length}`);
-  } catch { return res.status(200).send('OK v16'); }
+    return res.status(200).send(`SLS WIFI ONLINE v17 - ${new Date().toISOString()} - Fila: ${filaLiberar.length}`);
+  } catch { return res.status(200).send('OK v17'); }
 });
 app.use((err,req,res,next)=>{ console.error('[EXPRESS-ERROR]',err.message); return res.status(200).json({ ok:false, erro:'capturado', msg:err.message }); });
-app.listen(PORT, ()=>{ console.log(`[v16 FIX 1HORA] Rodando porta ${PORT}`); safeCertificado(); });
+app.listen(PORT, ()=>{ console.log(`[v17 FIX LOOP DEFINITIVO] Rodando porta ${PORT}`); safeCertificado(); });
+
 setInterval(async ()=>{
   try{
     const agora=Date.now();
@@ -242,6 +282,7 @@ setInterval(async ()=>{
     if (mudou) salvarDisco();
   } catch(e){}
 }, 30000);
+
 setInterval(async ()=>{
   try{
     const pendentes = [...pagamentos.entries()].filter(([_,p])=>p.status==='AGUARDANDO' && !p.isMock);
