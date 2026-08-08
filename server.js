@@ -64,6 +64,37 @@ app.post('/api/criar-pix', async (req,res)=>{ const r=await gerarPix(req.body); 
 app.post('/api/gerar-qrcode', async (req,res)=>{ const r=await gerarPix(req.body); res.json(r); });
 
 // hEX consome
+
+app.post('/api/gerar-qrcode', async (req, res) => {
+  try {
+    const { mac, ip, valor, profile, plan } = req.body;
+    const plano = profile || plan || req.body.plano || '1HORA';
+    const valorFinal = (valor || 3).toString();
+    const r = await gerarPix({ mac, ip, plano, valor: valorFinal });
+    return res.json({
+      txid: r.txid,
+      id: r.txid,
+      brcode: r.qrcode,
+      qrcode: r.qrcode,
+      pixCopiaECola: r.qrcode,
+      qrcodeImagem: r.qrcodeImagem,
+      status: 'PENDENTE'
+    });
+  } catch (e) {
+    console.error('[ERRO POST gerar-qrcode]', e.message);
+    return res.status(500).json({ erro: e.message });
+  }
+});
+
+app.get('/api/fila', (req, res) => {
+  const { txid } = req.query;
+  if (txid && fila[txid]) {
+    return res.json({ txid, status: fila[txid].status, mac: fila[txid].mac, ip: fila[txid].ip, plano: fila[txid].plano });
+  }
+  if (txid) return res.json({ txid, status: 'NAO_ENCONTRADO' });
+  res.json(fila);
+});
+
 app.get('/api/liberacoes', (req,res)=>{
   const pagos = Object.values(fila).filter(f=>f.status==='PAGO_LIBERAR');
   console.log(`[SLS] Processando fila... ${pagos.length} para liberar | Total: ${Object.keys(fila).length}`);
