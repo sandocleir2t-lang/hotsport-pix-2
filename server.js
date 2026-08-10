@@ -1,4 +1,4 @@
-// SLS WIFI - v18 MESCLADO CORRIGIDO
+// SLS WIFI - v20 FIX TXID 32 + POLLING VERBOSO (mantido tudo do seu v19)
 require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
@@ -16,7 +16,7 @@ const CERT_B64 = process.env.EFI_CERT_BASE64 || process.env.EFI_CERTIFICADO_BASE
 const CLIENT_ID = process.env.EFI_CLIENT_ID;
 const CLIENT_SECRET = process.env.EFI_CLIENT_SECRET;
 const CHAVE_PIX = process.env.EFI_PIX_KEY || process.env.EFI_CHAVE_PIX || process.env.CHAVE_PIX || "50574099000103";
-const VERSAO = "v19 FIX WEBHOOK";
+const VERSAO = "v20 FIX TXID32 + POLLING";
 
 let fila = {};
 try { if (fs.existsSync(FILA_PATH)) fila = JSON.parse(fs.readFileSync(FILA_PATH,'utf8')); } catch(e){ fila={}; }
@@ -34,13 +34,15 @@ try {
 app.get('/', (req,res)=> res.send(`SLS ${VERSAO} - ${new Date().toISOString()} - Fila:${Object.keys(fila).length}`));
 
 async function gerarPix({mac,ip,plano,valor}){
-  const txid = 'SLS'+Date.now()+Math.random().toString(36).substring(2,6).toUpperCase();
+  // FIX: TXID com 32 CHARS (EFI exige 26 a 35)
+  const base = `SLS${Date.now()}${Math.random().toString(36).substring(2,12).toUpperCase()}${Math.random().toString(36).substring(2,12).toUpperCase()}`;
+  const txid = base.substring(0,32);
   const valorFinal = (valor || (plano==='1HORA'?'3.00':'5.00')).toString();
   fila[txid] = { txid, mac:mac?.toUpperCase()||'SEM-MAC', ip:ip||'', plano:plano||'1HORA', valor:valorFinal, status:'PENDENTE', timestamp:Date.now() };
   salvar();
-  console.log(`[EFI] Gerando real TXID=${txid} VALOR=${valorFinal} MAC=${mac} PLANO=${plano}`);
+  console.log(`[EFI] Gerando real TXID=${txid} TAM=${txid.length} VALOR=${valorFinal} MAC=${mac} PLANO=${plano}`);
   try {
-    const cob = await efipay.pixCreateImmediateCharge({txid:txid.slice(0,32)}, {
+    const cob = await efipay.pixCreateImmediateCharge({txid}, {
       calendario:{expiracao:3600},
       devedor:{cpf:"11144477735", nome:"Cliente SLS WIFI"},
       valor:{original:parseFloat(valorFinal).toFixed(2)},
@@ -99,14 +101,12 @@ app.get('/api/liberacoes', (req,res)=>{
 
 app.get('/api/liberacoes/limpar', (req,res)=>{ const {txid}=req.query; if(txid && fila[txid]){ console.log(`[SLS] Liberado e limpo TXID ${txid}`); delete fila[txid]; salvar(); } res.send('OK'); });
 
-// WEBHOOK CORRIGIDO
 async function processaWebhook(req,res){
   try{
     console.log('[WEBHOOK] Body:', JSON.stringify(req.body).slice(0,800));
     let lista = req.body.pix || [];
     if(lista.length===0 && req.body.txid) lista.push(req.body);
     if(lista.length===0 && req.body.pix) lista = [req.body];
-
     lista.forEach(p=>{
       let txid = p.txid || p.id || '';
       console.log(`[PAGO] Tentando TXID=${txid}`);
@@ -127,27 +127,31 @@ async function processaWebhook(req,res){
   }catch(e){ console.log('[WEBHOOK ERRO]', e.message); }
   res.sendStatus(200);
 }
-// POLLING FALLBACK - verifica na EFI direto se pagou (se webhook falhar)
+
+// POLLING FALLBACK - VERBOSO
 setInterval(async () => {
   try {
     const pendentes = Object.values(fila).filter(f => f.status === 'PENDENTE');
-    if (pendentes.length === 0 || !efipay) return;
+    if (pendentes.length === 0 ||!efipay) return;
     console.log(`[POLLING] Verificando ${pendentes.length} pendentes na EFI...`);
     for (const p of pendentes) {
       try {
-        const detalhe = await efipay.pixDetailCharge({ txid: p.txid.slice(0, 32) });
-        // Se tem pix com endToEndId, foi pago
-        if (detalhe.pix && detalhe.pix.length > 0) {
+        const detalhe = await efipay.pixDetailCharge({ txid: p.txid });
+        const statusPix = detalhe.status || 'SEM_STATUS';
+        const qtdPix = detalhe.pix? detalhe.pix.length : 0;
+        console.log(`[POLLING] TXID=${p.txid} STATUS=${statusPix} QTD_PIX=${qtdPix}`);
+        if (detalhe.status === 'CONCLUIDA' || (detalhe.pix && detalhe.pix.length > 0)) {
           console.log(`[POLLING] ACHOU PAGO! TXID=${p.txid}`);
           p.status = 'PAGO_LIBERAR';
           salvar();
         }
       } catch (e) {
-        // txid ainda não pago, ignora
+        console.log(`[POLLING FALHA] TXID=${p.txid} ERRO=${e.message} | ${JSON.stringify(e).slice(0,200)}`);
       }
     }
-  } catch (e) { console.log('[POLLING ERRO]', e.message); }
-}, 30 * 1000); // a cada 30s
+  } catch (e) { console.log('[POLLING ERRO GERAL]', e.message); }
+}, 15 * 1000);
+
 app.post('/api/webhook', processaWebhook);
 app.post('/api/webhook/pix', processaWebhook);
 app.post('/webhook', processaWebhook);
@@ -155,7 +159,7 @@ app.post('/webhook', processaWebhook);
 app.get('/api/liberar-manual', (req,res)=>{ const {mac,ip,plano}=req.query; if(!mac) return res.status(400).send('mac'); const txid='MANUAL_'+Date.now(); fila[txid]={txid, mac:mac.toUpperCase(), ip:ip||'', plano:plano||'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()}; salvar(); res.send(`OK ${mac} vai liberar em 30s`); });
 app.get('/api/status', (req,res)=>{ res.json({versao:VERSAO, total:Object.keys(fila).length, pendentes:Object.values(fila).filter(f=>f.status==='PENDENTE').length, pagos_para_liberar:Object.values(fila).filter(f=>f.status==='PAGO_LIBERAR').length, temEfi:!!efipay, temChavePix:!!CHAVE_PIX, chavePix:CHAVE_PIX, fila}); });
 app.get('/api/limpar-fila', (req,res)=>{ fila={}; salvar(); res.send('ZERADO'); });
-app.get('/api/teste', (req,res)=>{ const mac=req.query.mac||'AA:BB:CC:DD:EE:99'; const txid='TESTE'+Date.now(); fila[txid]={txid, mac, ip:'10.5.50.200', plano:req.query.plano||'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()}; salvar(); res.send(`${txid};${mac};10.5.50.200;${req.query.plano||'1HORA'}`); });
+app.get('/api/teste', (req,res)=>{ const mac=req.query.mac||'AA:BB:CC:DD:EE:99'; const txid='TESTE'+Date.now()+Math.random().toString(36).substring(2,8).toUpperCase(); const txid32=txid.substring(0,32); fila={txid:txid32, mac, ip:'10.5.50.200', plano:req.query.plano||'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()}; salvar(); res.send(`${txid32};${mac};10.5.50.200;${req.query.plano||'1HORA'}`); });
 
 app.listen(PORT, ()=> console.log(`[SLS] ${VERSAO} porta ${PORT}`));
 setInterval(()=>{ let r=0; const agora=Date.now(); for(const k in fila) if(agora-fila[k].timestamp>24*60*60*1000){ delete fila[k]; r++; } if(r){ salvar(); console.log(`[SLS] Limpeza ${r}`);} }, 60*60*1000);
