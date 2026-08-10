@@ -1,4 +1,4 @@
-// SLS WIFI - v18 MESCLADO - v13 (fila boa) + v17 (EFI REAL com cert)
+// SLS WIFI - v18 MESCLADO CORRIGIDO
 require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
@@ -12,18 +12,16 @@ app.use(express.static('public'));
 const FILA_PATH = path.join(__dirname, 'fila.json');
 const PORT = process.env.PORT || 10000;
 
-// --- LEITURA ENV COMPATIVEL COM SUA PRINT ---
 const CERT_B64 = process.env.EFI_CERT_BASE64 || process.env.EFI_CERTIFICADO_BASE64 || process.env.EFI_CERTIFICADO_BASE64;
 const CLIENT_ID = process.env.EFI_CLIENT_ID;
 const CLIENT_SECRET = process.env.EFI_CLIENT_SECRET;
 const CHAVE_PIX = process.env.EFI_PIX_KEY || process.env.EFI_CHAVE_PIX || process.env.CHAVE_PIX || "50574099000103";
-const VERSAO = "v18 MESCLADO CNPJ FIX";
+const VERSAO = "v19 FIX WEBHOOK";
 
 let fila = {};
 try { if (fs.existsSync(FILA_PATH)) fila = JSON.parse(fs.readFileSync(FILA_PATH,'utf8')); } catch(e){ fila={}; }
 function salvar(){ fs.writeFileSync(FILA_PATH, JSON.stringify(fila, null, 2)); }
 
-// --- EFI REAL COM CERTIFICADO ---
 let efipay = null;
 try {
   const EfiPay = require('sdk-node-apis-efi');
@@ -35,7 +33,6 @@ try {
 
 app.get('/', (req,res)=> res.send(`SLS ${VERSAO} - ${new Date().toISOString()} - Fila:${Object.keys(fila).length}`));
 
-// COMPATIVEL COM SEU LOGIN ATUAL (GET e POST)
 async function gerarPix({mac,ip,plano,valor}){
   const txid = 'SLS'+Date.now()+Math.random().toString(36).substring(2,6).toUpperCase();
   const valorFinal = (valor || (plano==='1HORA'?'3.00':'5.00')).toString();
@@ -45,7 +42,7 @@ async function gerarPix({mac,ip,plano,valor}){
   try {
     const cob = await efipay.pixCreateImmediateCharge({txid:txid.slice(0,32)}, {
       calendario:{expiracao:3600},
-      devedor:{cpf:"11144477735", nome:"Cliente SLS WIFI"}, // CPF VALIDO FIX
+      devedor:{cpf:"11144477735", nome:"Cliente SLS WIFI"},
       valor:{original:parseFloat(valorFinal).toFixed(2)},
       chave:CHAVE_PIX,
       solicitacaoPagador:`SLS WIFI ${plano}`.slice(0,25)
@@ -61,9 +58,6 @@ async function gerarPix({mac,ip,plano,valor}){
 
 app.get('/api/gerar-qrcode', async (req,res)=>{ const r=await gerarPix(req.query); res.json(r); });
 app.post('/api/criar-pix', async (req,res)=>{ const r=await gerarPix(req.body); res.json(r); });
-app.post('/api/gerar-qrcode', async (req,res)=>{ const r=await gerarPix(req.body); res.json(r); });
-
-// hEX consome
 
 app.post('/api/gerar-qrcode', async (req, res) => {
   try {
@@ -102,46 +96,41 @@ app.get('/api/liberacoes', (req,res)=>{
   let txt=''; pagos.forEach(p=> txt+=`${p.txid};${p.mac};${p.ip};${p.plano}\n`);
   res.type('text/plain').send(txt);
 });
+
 app.get('/api/liberacoes/limpar', (req,res)=>{ const {txid}=req.query; if(txid && fila[txid]){ console.log(`[SLS] Liberado e limpo TXID ${txid}`); delete fila[txid]; salvar(); } res.send('OK'); });
 
-// WEBHOOK
-// WEBHOOK
-// WEBHOOK CORRIGIDO - aceita /api/webhook e /api/webhook/pix
+// WEBHOOK CORRIGIDO
 async function processaWebhook(req,res){
   try{
-    console.log('[WEBHOOK] Body:', JSON.stringify(req.body).slice(0,500));
-    const lista = req.body.pix || [];
-    if(lista.length===0 && req.body.txid) lista.push({txid:req.body.txid});
-    // Efí as vezes manda endToEndId, procura txid dentro
-    if(lista.length===0 && req.body.pix) lista.push(req.body);
+    console.log('[WEBHOOK] Body:', JSON.stringify(req.body).slice(0,800));
+    let lista = req.body.pix || [];
+    if(lista.length===0 && req.body.txid) lista.push(req.body);
+    if(lista.length===0 && req.body.pix) lista = [req.body];
 
     lista.forEach(p=>{
       let txid = p.txid || p.id || '';
-      // txid vem com 32 chars, o seu salva com SLS+timestamp, precisa achar pelo e2e?
-      // procura na fila pelo txid que contém
+      console.log(`[PAGO] Tentando TXID=${txid}`);
       let chave = txid;
       if(!fila[chave]){
-        // tenta achar fila que começa com mesmo final ou que tem esse txid no objeto
-        for(let k in fila){ if(k.includes(txid.slice(-10)) || txid.includes(k.slice(-10))) { chave=k; break; } }
+        for(let k in fila){
+          if(txid && (k.includes(txid.slice(-8)) || txid.includes(k.slice(-8)))) { chave=k; break; }
+        }
       }
-      console.log(`[PAGO] Webhook TXID=${txid} -> achou fila ${chave}`);
-      if(fila[chave]){ fila[chave].status='PAGO_LIBERAR'; }
-      else if(txid){ fila[txid]={txid, mac:'RECUPERADO', ip:'', plano:'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()}; }
+      if(fila[chave]){
+        fila[chave].status='PAGO_LIBERAR';
+        console.log(`[PAGO] Marcado PAGO_LIBERAR fila ${chave}`);
+      } else if(txid){
+        fila[txid]={txid, mac:'RECUPERADO', ip:'', plano:'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()};
+      }
     });
     salvar();
   }catch(e){ console.log('[WEBHOOK ERRO]', e.message); }
   res.sendStatus(200);
 }
+
 app.post('/api/webhook', processaWebhook);
 app.post('/api/webhook/pix', processaWebhook);
-app.post('/webhook', processaWebhook); // extra pra Efí antiga
-  try{
-    const lista = req.body.pix || []; if(lista.length===0 && req.body.txid) lista.push({txid:req.body.txid});
-    lista.forEach(p=>{ const txid=p.txid; console.log(`[PAGO] Webhook TXID=${txid}`); if(fila[txid]){ fila[txid].status='PAGO_LIBERAR'; } else { fila[txid]={txid, mac:'RECUPERADO', ip:'', plano:'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()}; } });
-    salvar();
-  }catch(e){}
-  res.sendStatus(200);
-});
+app.post('/webhook', processaWebhook);
 
 app.get('/api/liberar-manual', (req,res)=>{ const {mac,ip,plano}=req.query; if(!mac) return res.status(400).send('mac'); const txid='MANUAL_'+Date.now(); fila[txid]={txid, mac:mac.toUpperCase(), ip:ip||'', plano:plano||'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()}; salvar(); res.send(`OK ${mac} vai liberar em 30s`); });
 app.get('/api/status', (req,res)=>{ res.json({versao:VERSAO, total:Object.keys(fila).length, pendentes:Object.values(fila).filter(f=>f.status==='PENDENTE').length, pagos_para_liberar:Object.values(fila).filter(f=>f.status==='PAGO_LIBERAR').length, temEfi:!!efipay, temChavePix:!!CHAVE_PIX, chavePix:CHAVE_PIX, fila}); });
