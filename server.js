@@ -105,6 +105,7 @@ app.get('/api/liberacoes', (req,res)=>{
 app.get('/api/liberacoes/limpar', (req,res)=>{ const {txid}=req.query; if(txid && fila[txid]){ console.log(`[SLS] Liberado e limpo TXID ${txid}`); delete fila[txid]; salvar(); } res.send('OK'); });
 
 // WEBHOOK
+// WEBHOOK
 app.post('/api/webhook', (req,res)=>{ app.post('/api/webhook/pix', req, res); });
 app.post('/api/webhook/pix', (req,res)=>{
   try{
