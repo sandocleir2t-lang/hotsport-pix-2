@@ -141,10 +141,20 @@ btn.addEventListener('click', async ()=>{
     const interval=setInterval(async ()=>{
       try{
         const v=await fetch(`${API_BASE}/api/fila?txid=${txid}`).then(r=>r.json());
-        if(v.status==='PAGO_LIBERAR'){
-          clearInterval(interval);
-         document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO PROPAGANDA...</h2>`;
-setTimeout(()=>{ window.location.href='http://10.5.50.1/ad.html?link-orig=http://10.5.50.1/status'; },1500);
+      if(v.status==='PAGO_LIBERAR'){
+  clearInterval(interval);
+  document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO EM 3...</h2>`;
+  let c=3;
+  const timer = setInterval(()=>{
+    c--;
+    document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO EM ${c}...</h2>`;
+    if(c<=0){
+      clearInterval(timer);
+      // LOGA NO HEX E O HEX JÁ MOSTRA SEU alogin.html (SLS-Guincho.html) COM O 5,4,3,2,1
+      window.location.href=`http://10.5.50.1/login?username=${encodeURIComponent(mac)}&password=${encodeURIComponent(mac)}&dst=http://10.5.50.1/status`;
+    }
+  },1000);
+}
         }
       }catch(e){}
     },3000);
