@@ -127,7 +127,27 @@ async function processaWebhook(req,res){
   }catch(e){ console.log('[WEBHOOK ERRO]', e.message); }
   res.sendStatus(200);
 }
-
+// POLLING FALLBACK - verifica na EFI direto se pagou (se webhook falhar)
+setInterval(async () => {
+  try {
+    const pendentes = Object.values(fila).filter(f => f.status === 'PENDENTE');
+    if (pendentes.length === 0 || !efipay) return;
+    console.log(`[POLLING] Verificando ${pendentes.length} pendentes na EFI...`);
+    for (const p of pendentes) {
+      try {
+        const detalhe = await efipay.pixDetailCharge({ txid: p.txid.slice(0, 32) });
+        // Se tem pix com endToEndId, foi pago
+        if (detalhe.pix && detalhe.pix.length > 0) {
+          console.log(`[POLLING] ACHOU PAGO! TXID=${p.txid}`);
+          p.status = 'PAGO_LIBERAR';
+          salvar();
+        }
+      } catch (e) {
+        // txid ainda não pago, ignora
+      }
+    }
+  } catch (e) { console.log('[POLLING ERRO]', e.message); }
+}, 30 * 1000); // a cada 30s
 app.post('/api/webhook', processaWebhook);
 app.post('/api/webhook/pix', processaWebhook);
 app.post('/webhook', processaWebhook);
