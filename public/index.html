@@ -143,8 +143,8 @@ btn.addEventListener('click', async ()=>{
         const v=await fetch(`${API_BASE}/api/fila?txid=${txid}`).then(r=>r.json());
         if(v.status==='PAGO_LIBERAR'){
           clearInterval(interval);
-          document.getElementById('pixArea').innerHTML=`<h2 style="color:#a855f7">✅ PAGO!<br>NET LIBERADA</h2><p style="margin-top:8px;color:#8a8aa3">MAC ${mac}<br>Aguarde 5s e pode navegar!</p>`;
-          setTimeout(()=>{ window.location.href='http://10.5.50.1/login?dst=&popup=true'; },3000);
+         document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO PROPAGANDA...</h2>`;
+setTimeout(()=>{ window.location.href='http://10.5.50.1/ad.html?link-orig=http://10.5.50.1/status'; },1500);
         }
       }catch(e){}
     },3000);
