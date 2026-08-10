@@ -1,4 +1,4 @@
-// SLS WIFI - v20 FIX TXID 32 + POLLING VERBOSO (mantido tudo do seu v19)
+// SLS WIFI - v21 FIX TXID REAL EFI - copia tudo
 require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
@@ -12,15 +12,15 @@ app.use(express.static('public'));
 const FILA_PATH = path.join(__dirname, 'fila.json');
 const PORT = process.env.PORT || 10000;
 
-const CERT_B64 = process.env.EFI_CERT_BASE64 || process.env.EFI_CERTIFICADO_BASE64 || process.env.EFI_CERTIFICADO_BASE64;
+const CERT_B64 = process.env.EFI_CERT_BASE64 || process.env.EFI_CERTIFICADO_BASE64;
 const CLIENT_ID = process.env.EFI_CLIENT_ID;
 const CLIENT_SECRET = process.env.EFI_CLIENT_SECRET;
 const CHAVE_PIX = process.env.EFI_PIX_KEY || process.env.EFI_CHAVE_PIX || process.env.CHAVE_PIX || "50574099000103";
-const VERSAO = "v20 FIX TXID32 + POLLING";
+const VERSAO = "v21 FIX TXID REAL";
 
 let fila = {};
 try { if (fs.existsSync(FILA_PATH)) fila = JSON.parse(fs.readFileSync(FILA_PATH,'utf8')); } catch(e){ fila={}; }
-function salvar(){ fs.writeFileSync(FILA_PATH, JSON.stringify(fila, null, 2)); }
+function salvar(){ try{ fs.writeFileSync(FILA_PATH, JSON.stringify(fila, null, 2)); }catch(e){} }
 
 let efipay = null;
 try {
@@ -34,27 +34,31 @@ try {
 app.get('/', (req,res)=> res.send(`SLS ${VERSAO} - ${new Date().toISOString()} - Fila:${Object.keys(fila).length}`));
 
 async function gerarPix({mac,ip,plano,valor}){
-  // FIX: TXID com 32 CHARS (EFI exige 26 a 35)
   const base = `SLS${Date.now()}${Math.random().toString(36).substring(2,12).toUpperCase()}${Math.random().toString(36).substring(2,12).toUpperCase()}`;
-  const txid = base.substring(0,32);
+  const txidEnvio = base.substring(0,32);
   const valorFinal = (valor || (plano==='1HORA'?'3.00':'5.00')).toString();
-  fila[txid] = { txid, mac:mac?.toUpperCase()||'SEM-MAC', ip:ip||'', plano:plano||'1HORA', valor:valorFinal, status:'PENDENTE', timestamp:Date.now() };
-  salvar();
-  console.log(`[EFI] Gerando real TXID=${txid} TAM=${txid.length} VALOR=${valorFinal} MAC=${mac} PLANO=${plano}`);
+  console.log(`[EFI] Gerando real TXID_ENVIO=${txidEnvio} TAM=${txidEnvio.length} VALOR=${valorFinal} MAC=${mac} PLANO=${plano}`);
   try {
-    const cob = await efipay.pixCreateImmediateCharge({txid}, {
+    const cob = await efipay.pixCreateImmediateCharge({txid:txidEnvio}, {
       calendario:{expiracao:3600},
       devedor:{cpf:"11144477735", nome:"Cliente SLS WIFI"},
       valor:{original:parseFloat(valorFinal).toFixed(2)},
       chave:CHAVE_PIX,
       solicitacaoPagador:`SLS WIFI ${plano}`.slice(0,25)
     });
+    const txidReal = cob.txid || txidEnvio;
+    console.log(`[EFI] EFI RETORNOU txidReal=${txidReal} envio=${txidEnvio} loc.id=${cob.loc?.id}`);
+    fila[txidReal] = { txid:txidReal, txidEnvio, mac:mac?.toUpperCase()||'SEM-MAC', ip:ip||'', plano:plano||'1HORA', valor:valorFinal, status:'PENDENTE', timestamp:Date.now(), locId:cob.loc?.id };
+    salvar();
     const qrcode = await efipay.pixGenerateQRCode({id:cob.loc.id});
-    console.log(`[EFI] OK real - ${txid} MAC=${mac}`);
-    return { txid, qrcode:qrcode.qrcode, qrcodeImagem:qrcode.imagemQrcode, valor:valorFinal };
+    console.log(`[EFI] OK real - ${txidReal} MAC=${mac}`);
+    return { txid:txidReal, qrcode:qrcode.qrcode, qrcodeImagem:qrcode.imagemQrcode, valor:valorFinal };
   } catch(e){
-    console.error('[EFI] Erro, fallback MOCK', e.message);
-    return { txid, qrcode:`00020126580014BR.GOV.BCB.PIX0136${CHAVE_PIX}52040000530398654${valorFinal}5802BR5909SLS WIFI6009TERESINA62070503***6304ERRO:${e.message}`, valor:valorFinal, fallback:true };
+    console.error('[EFI] Erro, fallback MOCK', e.message, e);
+    const txidFallback = txidEnvio;
+    fila[txidFallback] = { txid:txidFallback, mac:mac?.toUpperCase()||'SEM-MAC', ip:ip||'', plano:plano||'1HORA', valor:valorFinal, status:'PENDENTE', timestamp:Date.now() };
+    salvar();
+    return { txid:txidFallback, qrcode:`00020126580014BR.GOV.BCB.PIX0136${CHAVE_PIX}52040000530398654${valorFinal}5802BR5909SLS WIFI6009TERESINA62070503***6304`, valor:valorFinal, fallback:true };
   }
 }
 
@@ -67,15 +71,7 @@ app.post('/api/gerar-qrcode', async (req, res) => {
     const plano = profile || plan || req.body.plano || '1HORA';
     const valorFinal = (valor || 3).toString();
     const r = await gerarPix({ mac, ip, plano, valor: valorFinal });
-    return res.json({
-      txid: r.txid,
-      id: r.txid,
-      brcode: r.qrcode,
-      qrcode: r.qrcode,
-      pixCopiaECola: r.qrcode,
-      qrcodeImagem: r.qrcodeImagem,
-      status: 'PENDENTE'
-    });
+    return res.json({ txid: r.txid, id: r.txid, brcode: r.qrcode, qrcode: r.qrcode, pixCopiaECola: r.qrcode, qrcodeImagem: r.qrcodeImagem, status: 'PENDENTE' });
   } catch (e) {
     console.error('[ERRO POST gerar-qrcode]', e.message);
     return res.status(500).json({ erro: e.message });
@@ -84,9 +80,7 @@ app.post('/api/gerar-qrcode', async (req, res) => {
 
 app.get('/api/fila', (req, res) => {
   const { txid } = req.query;
-  if (txid && fila[txid]) {
-    return res.json({ txid, status: fila[txid].status, mac: fila[txid].mac, ip: fila[txid].ip, plano: fila[txid].plano });
-  }
+  if (txid && fila[txid]) return res.json({ txid, status: fila[txid].status, mac: fila[txid].mac, ip: fila[txid].ip, plano: fila[txid].plano });
   if (txid) return res.json({ txid, status: 'NAO_ENCONTRADO' });
   res.json(fila);
 });
@@ -109,26 +103,19 @@ async function processaWebhook(req,res){
     if(lista.length===0 && req.body.pix) lista = [req.body];
     lista.forEach(p=>{
       let txid = p.txid || p.id || '';
-      console.log(`[PAGO] Tentando TXID=${txid}`);
+      console.log(`[PAGO WEBHOOK] Tentando TXID=${txid}`);
       let chave = txid;
       if(!fila[chave]){
-        for(let k in fila){
-          if(txid && (k.includes(txid.slice(-8)) || txid.includes(k.slice(-8)))) { chave=k; break; }
-        }
+        for(let k in fila){ if(txid && (k.includes(txid.slice(-8)) || txid.includes(k.slice(-8)))) { chave=k; break; } }
       }
-      if(fila[chave]){
-        fila[chave].status='PAGO_LIBERAR';
-        console.log(`[PAGO] Marcado PAGO_LIBERAR fila ${chave}`);
-      } else if(txid){
-        fila[txid]={txid, mac:'RECUPERADO', ip:'', plano:'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()};
-      }
+      if(fila[chave]){ fila[chave].status='PAGO_LIBERAR'; console.log(`[PAGO] Marcado PAGO_LIBERAR fila ${chave}`); }
+      else if(txid){ fila[txid]={txid, mac:'RECUPERADO', ip:'', plano:'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()}; }
     });
     salvar();
   }catch(e){ console.log('[WEBHOOK ERRO]', e.message); }
   res.sendStatus(200);
 }
 
-// POLLING FALLBACK - VERBOSO
 setInterval(async () => {
   try {
     const pendentes = Object.values(fila).filter(f => f.status === 'PENDENTE');
@@ -146,7 +133,7 @@ setInterval(async () => {
           salvar();
         }
       } catch (e) {
-        console.log(`[POLLING FALHA] TXID=${p.txid} ERRO=${e.message} | ${JSON.stringify(e).slice(0,200)}`);
+        console.log(`[POLLING FALHA] TXID=${p.txid} ERRO=${e.message} | ${JSON.stringify(e).slice(0,300)}`);
       }
     }
   } catch (e) { console.log('[POLLING ERRO GERAL]', e.message); }
