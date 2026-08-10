@@ -106,8 +106,35 @@ app.get('/api/liberacoes/limpar', (req,res)=>{ const {txid}=req.query; if(txid &
 
 // WEBHOOK
 // WEBHOOK
-app.post('/api/webhook', (req,res)=>{ app.post('/api/webhook/pix', req, res); });
-app.post('/api/webhook/pix', (req,res)=>{
+// WEBHOOK CORRIGIDO - aceita /api/webhook e /api/webhook/pix
+async function processaWebhook(req,res){
+  try{
+    console.log('[WEBHOOK] Body:', JSON.stringify(req.body).slice(0,500));
+    const lista = req.body.pix || [];
+    if(lista.length===0 && req.body.txid) lista.push({txid:req.body.txid});
+    // Efí as vezes manda endToEndId, procura txid dentro
+    if(lista.length===0 && req.body.pix) lista.push(req.body);
+
+    lista.forEach(p=>{
+      let txid = p.txid || p.id || '';
+      // txid vem com 32 chars, o seu salva com SLS+timestamp, precisa achar pelo e2e?
+      // procura na fila pelo txid que contém
+      let chave = txid;
+      if(!fila[chave]){
+        // tenta achar fila que começa com mesmo final ou que tem esse txid no objeto
+        for(let k in fila){ if(k.includes(txid.slice(-10)) || txid.includes(k.slice(-10))) { chave=k; break; } }
+      }
+      console.log(`[PAGO] Webhook TXID=${txid} -> achou fila ${chave}`);
+      if(fila[chave]){ fila[chave].status='PAGO_LIBERAR'; }
+      else if(txid){ fila[txid]={txid, mac:'RECUPERADO', ip:'', plano:'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()}; }
+    });
+    salvar();
+  }catch(e){ console.log('[WEBHOOK ERRO]', e.message); }
+  res.sendStatus(200);
+}
+app.post('/api/webhook', processaWebhook);
+app.post('/api/webhook/pix', processaWebhook);
+app.post('/webhook', processaWebhook); // extra pra Efí antiga
   try{
     const lista = req.body.pix || []; if(lista.length===0 && req.body.txid) lista.push({txid:req.body.txid});
     lista.forEach(p=>{ const txid=p.txid; console.log(`[PAGO] Webhook TXID=${txid}`); if(fila[txid]){ fila[txid].status='PAGO_LIBERAR'; } else { fila[txid]={txid, mac:'RECUPERADO', ip:'', plano:'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()}; } });
