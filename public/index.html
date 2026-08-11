@@ -149,11 +149,22 @@ btn.addEventListener('click', async ()=>{
     c--;
     document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO EM ${c}...</h2>`;
     if(c<=0){
-      clearInterval(timer);
-      // LOGA NO HEX E O HEX JÁ MOSTRA SEU alogin.html (SLS-Guincho.html) COM O 5,4,3,2,1
-      window.location.href=`http://10.5.50.1/login?username=${encodeURIComponent(mac)}&password=${encodeURIComponent(mac)}&dst=http://10.5.50.1/status`;
+           clearInterval(timer);
+        // LOGA NO HEX E O HEX JÁ MOSTRA SEU alogin.html (SLS-Guincho.html)
+        window.location.href=`http://10.5.50.1/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&dst=&popup=false`;
+      },1000);
     }
-  },1000);
+  } catch(e) {
+    console.error("Erro interno:", e);
+  }
+},3000);
+
+} catch(err){
+  errorBox.textContent='Erro: '+err.message;
+  errorBox.style.display='block';
+} finally {
+  btn.disabled=false; btn.textContent='⚡ GERAR PIX - PAGAR AGORA';
+}
 }
         }
       }catch(e){}
