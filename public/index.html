@@ -117,9 +117,11 @@ if(ip.includes('$')) ip='0.0.0.0';
 document.getElementById('footerMac').innerText = `MAC: ${mac} | IP: ${ip} | SLS hEX v13.7 FINAL`;
 const btn=document.getElementById('btnGerar');
 const errorBox=document.getElementById('errorBox');
+
 btn.addEventListener('click', async ()=>{
   errorBox.style.display='none';
-  btn.disabled=true; btn.textContent='GERANDO PIX...';
+  btn.disabled=true; 
+  btn.textContent='GERANDO PIX...';
   try{
     const res = await fetch(API_BASE + '/api/gerar-qrcode', {
       method:'POST',
@@ -127,7 +129,8 @@ btn.addEventListener('click', async ()=>{
       body: JSON.stringify({valor:Number(planoSelecionado.valor), tempo:planoSelecionado.tempo, plan:planoSelecionado.profile, profile:planoSelecionado.profile, mac, ip})
     });
     const text=await res.text();
-    let data; try{ data=JSON.parse(text); }catch{ throw new Error(text.slice(0,200)); }
+    let data; 
+    try{ data=JSON.parse(text); }catch{ throw new Error(text.slice(0,200)); }
     if(!data.brcode && !data.qrcode) throw new Error('API não retornou PIX');
     const brcode = data.brcode || data.qrcode || data.pixCopiaECola;
     document.getElementById('pixValor').textContent = `PIX R$ ${planoSelecionado.valor},00 - ${planoSelecionado.tempo}`;
@@ -137,45 +140,44 @@ btn.addEventListener('click', async ()=>{
     document.getElementById('pixArea').style.display='block';
     document.getElementById('pixArea').scrollIntoView({behavior:'smooth'});
     const txid=data.txid||data.id;
-    if(!txid) throw new Error('Sem TXID');
+    if(!txid) throw new Error('Sem TXID retornado');
+
+    // POLLING CORRIGIDO - SEM ERRO DE SINTAXE
     const interval=setInterval(async ()=>{
       try{
         const v=await fetch(`${API_BASE}/api/fila?txid=${txid}`).then(r=>r.json());
-      if(v.status==='PAGO_LIBERAR'){
-  clearInterval(interval);
-  document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO EM 3...</h2>`;
-  let c=3;
-  const timer = setInterval(()=>{
-    c--;
-    document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO EM ${c}...</h2>`;
-    if(c<=0){
-           clearInterval(timer);
-        // LOGA NO HEX E O HEX JÁ MOSTRA SEU alogin.html (SLS-Guincho.html)
-        window.location.href=`http://10.5.50.1/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&dst=&popup=false`;
-      },1000);
-    }
-  } catch(e) {
-    console.error("Erro interno:", e);
-  }
-},3000);
-
-} catch(err){
-  errorBox.textContent='Erro: '+err.message;
-  errorBox.style.display='block';
-} finally {
-  btn.disabled=false; btn.textContent='⚡ GERAR PIX - PAGAR AGORA';
-}
-}
+        if(v.status==='PAGO_LIBERAR'){
+          clearInterval(interval);
+          let c=3;
+          document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO EM 3...</h2>`;
+          const timer = setInterval(()=>{
+            c--;
+            if(c>0){
+              document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO EM ${c}...</h2>`;
+            } else {
+              clearInterval(timer);
+              const username = v.username || v.user || mac;
+              const password = v.password || v.pass || 'sls123';
+              window.location.href=`http://10.5.50.1/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&dst=&popup=false`;
+            }
+          },1000);
         }
-      }catch(e){}
+      }catch(e){
+        console.error("Erro no polling:", e);
+      }
     },3000);
+
   }catch(err){
     errorBox.textContent='Erro: '+err.message;
     errorBox.style.display='block';
-  }finally{
-    btn.disabled=false; btn.textContent='⌖ GERAR PIX - PAGAR AGORA';
+    btn.disabled=false; 
+    btn.textContent='⌖ GERAR PIX - PAGAR AGORA';
+    return;
   }
+  btn.disabled=false; 
+  btn.textContent='⚡ GERAR PIX - PAGAR AGORA';
 });
+
 function copiarPix(){
   const t=document.getElementById('pixCopia').innerText;
   navigator.clipboard.writeText(t).then(()=>alert('PIX copiado!')).catch(()=>{
