@@ -108,12 +108,16 @@ document.querySelectorAll('.plan-box').forEach(box=>{
 const urlParams = new URLSearchParams(window.location.search);
 let macRaw = urlParams.get('mac') || "$(mac)";
 let ipRaw = urlParams.get('ip') || "$(ip)";
+let linkLoginRaw = urlParams.get('link-login') || "$(link-login-only)";
 try{ macRaw=decodeURIComponent(macRaw); }catch{}
 try{ ipRaw=decodeURIComponent(ipRaw); }catch{}
+try{ linkLoginRaw=decodeURIComponent(linkLoginRaw); }catch{}
 let mac = macRaw.replace(/%3A/gi,':').trim().toUpperCase();
 let ip = ipRaw.trim();
+let linkLogin = linkLoginRaw.trim();
 if(mac.includes('$')||mac.length<8) mac='AA:BB:CC:DD:EE:FF';
 if(ip.includes('$')) ip='0.0.0.0';
+if(linkLogin.includes('$') || linkLogin.length<5) linkLogin = "http://10.5.50.1/login";
 document.getElementById('footerMac').innerText = `MAC: ${mac} | IP: ${ip} | SLS hEX v13.7 FINAL`;
 const btn=document.getElementById('btnGerar');
 const errorBox=document.getElementById('errorBox');
@@ -142,11 +146,19 @@ btn.addEventListener('click', async ()=>{
     const txid=data.txid||data.id;
     if(!txid) throw new Error('Sem TXID retornado');
 
-    // POLLING CORRIGIDO - SEM ERRO DE SINTAXE
+    // POLLING CORRIGIDO v2 - ESPERA O hEX CRIAR O USUÁRIO
+    let tentativasPosPago = 0;
     const interval=setInterval(async ()=>{
       try{
         const v=await fetch(`${API_BASE}/api/fila?txid=${txid}`).then(r=>r.json());
-        if(v.status==='PAGO_LIBERAR'){
+        console.log("FILA:", v);
+        if(v.status==='PAGO_LIBERAR' || v.status==='PAGO' || v.pago===true){
+          tentativasPosPago++;
+          // Espera 2 ciclos (6s) para o script SLS v30 criar o user no hEX
+          if(tentativasPosPago < 2){
+            document.getElementById('pixArea').innerHTML=`<h2 style="color:#fbbf24">✅ PAGO! Criando usuário no hEX...</h2><small style="color:#8a8aa3">Aguarde ${tentativasPosPago}/3</small>`;
+            return;
+          }
           clearInterval(interval);
           let c=3;
           document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO EM 3...</h2>`;
@@ -156,9 +168,19 @@ btn.addEventListener('click', async ()=>{
               document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO EM ${c}...</h2>`;
             } else {
               clearInterval(timer);
-              const username = v.username || v.user || mac;
-              const password = v.password || v.pass || 'sls123';
-              window.location.href=`http://10.5.50.1/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&dst=&popup=false`;
+              // Pega usuário/senha que o servidor retornou, com fallbacks que o SLS v30 usa
+              let username = v.username || v.user || mac;
+              // O SLS v30 geralmente usa a mesma senha que o usuário ou o MAC sem :
+              let password = v.password || v.pass || v.senha || mac || '1234';
+              
+              // Tenta login no hotspot com a URL que veio do Mikrotik
+              let loginUrl = linkLogin;
+              if(!loginUrl.includes('?')) loginUrl += '?';
+              else if(!loginUrl.endsWith('?') && !loginUrl.endsWith('&')) loginUrl += '&';
+              
+              let destino = `${loginUrl}username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&dst=&popup=false`;
+              console.log("Indo para:", destino);
+              window.location.href = destino;
             }
           },1000);
         }
@@ -188,7 +210,7 @@ function loginVoucher(){
   const u=document.getElementById('voucherUser').value.trim();
   const p=document.getElementById('voucherPass').value.trim();
   if(!u||!p){ alert('Digite voucher e senha'); return; }
-  window.location.href=`http://10.5.50.1/login?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`;
+  window.location.href=`${linkLogin}?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`;
 }
 setInterval(()=>{ document.getElementById('count').textContent=240+Math.floor(Math.random()*15); },5000);
 </script>
