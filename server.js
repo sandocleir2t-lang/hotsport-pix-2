@@ -150,7 +150,7 @@ setInterval(async () => {
       }
     }
   } catch (e) { console.log('[POLLING ERRO GERAL]', e.message); }
-}, 15 * 1000);
+}, 5 * 1000);
 
 app.post('/api/webhook', processaWebhook);
 app.post('/api/webhook/pix', processaWebhook);
