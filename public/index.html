@@ -122,6 +122,53 @@ document.getElementById('footerMac').innerText = `MAC: ${mac} | IP: ${ip} | SLS 
 const btn=document.getElementById('btnGerar');
 const errorBox=document.getElementById('errorBox');
 
+// Se a página recarregou com um pagamento em andamento (ex: o navegador reiniciou
+// a aba ao voltar do app do banco), retoma a checagem em vez de voltar pra tela inicial
+(function retomarSePendente(){
+  let txidSalvo = null;
+  try{ txidSalvo = sessionStorage.getItem('sls_txid_pendente'); }catch(e){}
+  if(!txidSalvo) return;
+
+  document.getElementById('pixArea').style.display='block';
+  document.getElementById('pixArea').innerHTML = `<h2 style="color:#fbbf24">✅ Retomando seu pagamento...</h2><small style="color:#8a8aa3">Verificando status, aguarde</small>`;
+  btn.style.display='none';
+
+  let ciclos = 0;
+  const LIMITE = 40;
+  async function checar(){
+    try{
+      const v = await fetch(`${API_BASE}/api/fila?txid=${txidSalvo}`).then(r=>r.json());
+      if(v.status==='LIBERADO'){
+        clearInterval(loopId);
+        try{ sessionStorage.removeItem('sls_txid_pendente'); }catch(e){}
+        document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO! Liberando...</h2>`;
+        let username = v.username || v.user || mac;
+        let password = v.password || v.pass || v.senha || mac || '1234';
+        let loginUrl = linkLogin;
+        if(!loginUrl.includes('?')) loginUrl += '?';
+        else if(!loginUrl.endsWith('?') && !loginUrl.endsWith('&')) loginUrl += '&';
+        window.location.href = `${loginUrl}username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&dst=&popup=false`;
+        return;
+      }
+      if(v.status==='NAO_ENCONTRADO'){
+        clearInterval(loopId);
+        try{ sessionStorage.removeItem('sls_txid_pendente'); }catch(e){}
+        document.getElementById('pixArea').style.display='none';
+        btn.style.display='flex';
+        return;
+      }
+      ciclos++;
+      if(ciclos > LIMITE){
+        clearInterval(loopId);
+        document.getElementById('pixArea').innerHTML=`<h2 style="color:#fbbf24">✅ Pagamento confirmado</h2><p style="font-size:12px;color:#a1a1b5;margin-top:8px">Está demorando mais que o normal pra liberar. Aguarde mais um pouco ou chame o suporte do evento.</p>`;
+      }
+    }catch(e){ console.error(e); }
+  }
+  const loopId = setInterval(checar, 3000);
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') checar(); });
+  checar();
+})();
+
 btn.addEventListener('click', async ()=>{
   errorBox.style.display='none';
   btn.disabled=true; 
@@ -146,37 +193,35 @@ btn.addEventListener('click', async ()=>{
     const txid=data.txid||data.id;
     if(!txid) throw new Error('Sem TXID retornado');
 
+    // Guarda o progresso - se o navegador recarregar a página (comum ao trocar pro app do banco
+    // e voltar), a gente consegue retomar de onde parou em vez de perder tudo
+    try{ sessionStorage.setItem('sls_txid_pendente', txid); }catch(e){}
+
     // POLLING v3 - ESPERA CONFIRMAÇÃO REAL DO ROTEADOR (status LIBERADO), NÃO UM TEMPO FIXO
     let jaMostrouPago = false;
     let ciclosEsperandoLiberacao = 0;
-    const LIMITE_CICLOS_LIBERACAO = 14; // 14 x 3s = ~42s de tolerância antes de avisar problema
+    const LIMITE_CICLOS_LIBERACAO = 40; // 40 x 3s = ~2min de tolerância (dá tempo de trocar pro app do banco e voltar)
 
-    const interval=setInterval(async ()=>{
+    async function checarStatus(){
       try{
         const v=await fetch(`${API_BASE}/api/fila?txid=${txid}`).then(r=>r.json());
         console.log("FILA:", v);
 
         if(v.status==='LIBERADO'){
-          // Roteador confirmou de verdade. Agora sim é seguro seguir.
+          // Roteador confirmou de verdade e já deixou a sessão ativa.
+          // Vai direto pro login do hotspot - o próprio roteador mostra a tela de anúncio
+          // com a contagem (alogin.html), não precisa fazer nossa própria contagem aqui.
           clearInterval(interval);
-          let c=3;
-          document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO EM 3...</h2>`;
-          const timer = setInterval(()=>{
-            c--;
-            if(c>0){
-              document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO!<br>LIBERANDO EM ${c}...</h2>`;
-            } else {
-              clearInterval(timer);
-              let username = v.username || v.user || mac;
-              let password = v.password || v.pass || v.senha || mac || '1234';
-              let loginUrl = linkLogin;
-              if(!loginUrl.includes('?')) loginUrl += '?';
-              else if(!loginUrl.endsWith('?') && !loginUrl.endsWith('&')) loginUrl += '&';
-              let destino = `${loginUrl}username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&dst=&popup=false`;
-              console.log("Indo para:", destino);
-              window.location.href = destino;
-            }
-          },1000);
+          try{ sessionStorage.removeItem('sls_txid_pendente'); }catch(e){}
+          document.getElementById('pixArea').innerHTML=`<h2 style="color:#00ff88">✅ PAGO! Liberando...</h2>`;
+          let username = v.username || v.user || mac;
+          let password = v.password || v.pass || v.senha || mac || '1234';
+          let loginUrl = linkLogin;
+          if(!loginUrl.includes('?')) loginUrl += '?';
+          else if(!loginUrl.endsWith('?') && !loginUrl.endsWith('&')) loginUrl += '&';
+          let destino = `${loginUrl}username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&dst=&popup=false`;
+          console.log("Indo para:", destino);
+          window.location.href = destino;
           return;
         }
 
@@ -195,7 +240,18 @@ btn.addEventListener('click', async ()=>{
       }catch(e){
         console.error("Erro no polling:", e);
       }
-    },3000);
+    }
+
+    const interval=setInterval(checarStatus, 3000);
+
+    // FIX: se o navegador congelar a aba (ex: usuário sai pro app do banco pra pagar
+    // e volta), o setInterval acima pode ficar pausado. Assim que a aba voltar a ficar
+    // visível, força uma checagem imediata em vez de esperar o próximo ciclo de 3s.
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.visibilityState === 'visible'){
+        checarStatus();
+      }
+    });
 
   }catch(err){
     errorBox.textContent='Erro: '+err.message;
