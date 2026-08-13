@@ -54,6 +54,7 @@ body{background:#0f0f14;color:#fff;min-height:100vh;display:flex;justify-content
   <div class="top"><div class="dot"></div> ONLINE • <span id="count">247</span> CLIENTES CONECTADOS</div>
   <div class="logo"><div class="logo-icon">📶</div><h1>SLS<span>WIFI</span></h1><p>Internet rápida • Pagamento instantâneo via PIX</p></div>
   <div class="content">
+    <div id="telaEscolhaPlano" style="display:none">
     <div class="alert">⚠ NÃO FECHE ESTA TELA ATÉ PAGAR!</div>
     <div class="plan-header"><b>ESCOLHA SEU PLANO</b><span class="badge-top">⚡ Ativação imediata</span></div>
 
@@ -75,6 +76,12 @@ body{background:#0f0f14;color:#fff;min-height:100vh;display:flex;justify-content
 
     <button class="btn" id="btnGerar">⌖ GERAR PIX - PAGAR AGORA</button>
 
+    <div class="voucher-sep"><div></div><span>TEM VOUCHER?</span><div></div></div>
+    <input class="input" id="voucherUser" placeholder="CÓDIGO VOUCHER" style="text-transform:uppercase">
+    <input class="input" id="voucherPass" type="password" placeholder="SENHA">
+    <button class="btn-voucher" onclick="loginVoucher()">ENTRAR COM VOUCHER</button>
+    </div>
+
     <div id="pixArea">
       <b id="pixValor" style="font-size:14px">PIX R$ 3,00</b>
       <div id="qrcode">Gerando QR...</div>
@@ -82,11 +89,6 @@ body{background:#0f0f14;color:#fff;min-height:100vh;display:flex;justify-content
       <button class="btn" style="margin-top:10px;background:#a855f7" onclick="copiarPix()">COPIAR PIX COPIA E COLA</button>
       <small style="display:block;margin-top:10px;color:#8a8aa3;font-size:11px">Aguardando pagamento... checando a cada 3s<br>Não feche esta tela!</small>
     </div>
-
-    <div class="voucher-sep"><div></div><span>TEM VOUCHER?</span><div></div></div>
-    <input class="input" id="voucherUser" placeholder="CÓDIGO VOUCHER" style="text-transform:uppercase">
-    <input class="input" id="voucherPass" type="password" placeholder="SENHA">
-    <button class="btn-voucher" onclick="loginVoucher()">ENTRAR COM VOUCHER</button>
 
     <div class="error" id="errorBox"></div>
   </div>
@@ -123,15 +125,19 @@ const btn=document.getElementById('btnGerar');
 const errorBox=document.getElementById('errorBox');
 
 // Se a página recarregou com um pagamento em andamento (ex: o navegador reiniciou
-// a aba ao voltar do app do banco), retoma a checagem em vez de voltar pra tela inicial
-(function retomarSePendente(){
+// a aba ao voltar do app do banco), retoma a checagem em vez de voltar pra tela inicial.
+// Se não houver pagamento pendente, mostra a tela de planos normalmente.
+(function iniciar(){
   let txidSalvo = null;
   try{ txidSalvo = sessionStorage.getItem('sls_txid_pendente'); }catch(e){}
-  if(!txidSalvo) return;
+
+  if(!txidSalvo){
+    document.getElementById('telaEscolhaPlano').style.display='';
+    return;
+  }
 
   document.getElementById('pixArea').style.display='block';
   document.getElementById('pixArea').innerHTML = `<h2 style="color:#fbbf24">✅ Retomando seu pagamento...</h2><small style="color:#8a8aa3">Verificando status, aguarde</small>`;
-  btn.style.display='none';
 
   let ciclos = 0;
   const LIMITE = 40;
@@ -154,7 +160,7 @@ const errorBox=document.getElementById('errorBox');
         clearInterval(loopId);
         try{ sessionStorage.removeItem('sls_txid_pendente'); }catch(e){}
         document.getElementById('pixArea').style.display='none';
-        btn.style.display='flex';
+        document.getElementById('telaEscolhaPlano').style.display='';
         return;
       }
       ciclos++;
