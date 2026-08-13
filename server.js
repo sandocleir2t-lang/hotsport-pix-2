@@ -1,4 +1,4 @@
-// SLS WIFI - v21 FIX TXID REAL EFI - copia tudo
+// SLS WIFI - v22 FIX SINCRONIA COM ROTEADOR
 require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
@@ -16,7 +16,7 @@ const CERT_B64 = process.env.EFI_CERT_BASE64 || process.env.EFI_CERTIFICADO_BASE
 const CLIENT_ID = process.env.EFI_CLIENT_ID;
 const CLIENT_SECRET = process.env.EFI_CLIENT_SECRET;
 const CHAVE_PIX = process.env.EFI_PIX_KEY || process.env.EFI_CHAVE_PIX || process.env.CHAVE_PIX || "50574099000103";
-const VERSAO = "v21 FIX TXID REAL";
+const VERSAO = "v22 FIX SINCRONIA";
 
 let fila = {};
 try { if (fs.existsSync(FILA_PATH)) fila = JSON.parse(fs.readFileSync(FILA_PATH,'utf8')); } catch(e){ fila={}; }
@@ -78,6 +78,7 @@ app.post('/api/gerar-qrcode', async (req, res) => {
   }
 });
 
+// AGORA retorna também 'LIBERADO' quando o roteador ja confirmou de verdade
 app.get('/api/fila', (req, res) => {
   const { txid } = req.query;
   if (txid && fila[txid]) return res.json({ txid, status: fila[txid].status, mac: fila[txid].mac, ip: fila[txid].ip, plano: fila[txid].plano });
@@ -85,6 +86,7 @@ app.get('/api/fila', (req, res) => {
   res.json(fila);
 });
 
+// O roteador so ve quem esta PAGO_LIBERAR (continua igual)
 app.get('/api/liberacoes', (req,res)=>{
   const pagos = Object.values(fila).filter(f=>f.status==='PAGO_LIBERAR');
   console.log(`[SLS] Processando fila... ${pagos.length} para liberar | Total: ${Object.keys(fila).length}`);
@@ -93,7 +95,18 @@ app.get('/api/liberacoes', (req,res)=>{
   res.type('text/plain').send(txt);
 });
 
-app.get('/api/liberacoes/limpar', (req,res)=>{ const {txid}=req.query; if(txid && fila[txid]){ console.log(`[SLS] Liberado e limpo TXID ${txid}`); delete fila[txid]; salvar(); } res.send('OK'); });
+// MUDANCA PRINCIPAL: em vez de apagar, marca como LIBERADO.
+// O frontend fica perguntando ate ver esse status, em vez de contar tempo no escuro.
+app.get('/api/liberacoes/limpar', (req,res)=>{
+  const {txid}=req.query;
+  if(txid && fila[txid]){
+    fila[txid].status = 'LIBERADO';
+    fila[txid].liberadoEm = Date.now();
+    console.log(`[SLS] Confirmado LIBERADO pelo roteador TXID ${txid}`);
+    salvar();
+  }
+  res.send('OK');
+});
 
 async function processaWebhook(req,res){
   try{
@@ -149,4 +162,14 @@ app.get('/api/limpar-fila', (req,res)=>{ fila={}; salvar(); res.send('ZERADO'); 
 app.get('/api/teste', (req,res)=>{ const mac=req.query.mac||'AA:BB:CC:DD:EE:99'; const txid='TESTE'+Date.now()+Math.random().toString(36).substring(2,8).toUpperCase(); const txid32=txid.substring(0,32); fila={txid:txid32, mac, ip:'10.5.50.200', plano:req.query.plano||'1HORA', valor:'3.00', status:'PAGO_LIBERAR', timestamp:Date.now()}; salvar(); res.send(`${txid32};${mac};10.5.50.200;${req.query.plano||'1HORA'}`); });
 
 app.listen(PORT, ()=> console.log(`[SLS] ${VERSAO} porta ${PORT}`));
-setInterval(()=>{ let r=0; const agora=Date.now(); for(const k in fila) if(agora-fila[k].timestamp>24*60*60*1000){ delete fila[k]; r++; } if(r){ salvar(); console.log(`[SLS] Limpeza ${r}`);} }, 60*60*1000);
+// Limpeza agora tambem remove os LIBERADOS depois de 1h
+setInterval(()=>{
+  let r=0; const agora=Date.now();
+  for(const k in fila){
+    const f = fila[k];
+    const limite = f.status==='LIBERADO' ? 60*60*1000 : 24*60*60*1000;
+    const marca = f.liberadoEm || f.timestamp;
+    if(agora-marca>limite){ delete fila[k]; r++; }
+  }
+  if(r){ salvar(); console.log(`[SLS] Limpeza ${r}`);}
+}, 60*60*1000);
